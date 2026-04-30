@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traveleando MX</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #191B1E; color: #1D1D1F; overflow-x: hidden; -webkit-tap-highlight-color: transparent; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* ============ TRIP GROUP (separación entre viajes) ============ */
+        .trip-group {
+            margin-bottom: 28px;
+        }
+        .trip-group:last-child {
+            margin-bottom: 8px;
+        }
+
+        /* ============ BOARDING PASS ============ */
+        .boarding-pass {
+            position: relative;
+            background: #FFFFFF;
+            border-radius: 22px;
+            transition: transform 0.25s ease;
+            cursor: pointer;
+            /* Las muescas se hacen con radial-gradient para que sean reales (transparentes al fondo) */
+        }
+        .boarding-pass:active { transform: scale(0.985); }
+
+        /* Muescas laterales en la línea perforada */
+        .pass-notch-wrap {
+            position: relative;
+            height: 22px;
+            margin: 0 0;
+        }
+        .pass-notch-wrap::before,
+        .pass-notch-wrap::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 22px;
+            height: 22px;
+            background: #191B1E; /* color del fondo del body */
+            border-radius: 50%;
+        }
+        .pass-notch-wrap::before { left: -11px; }
+        .pass-notch-wrap::after { right: -11px; }
+
+        .pass-perf {
+            position: absolute;
+            top: 50%;
+            left: 18px;
+            right: 18px;
+            transform: translateY(-50%);
+            border-top: 1.5px dashed #D2D2D7;
+        }
+
+        /* Línea entre origen y destino (ruta con avión) */
+        .route-line {
+            flex: 1;
+            position: relative;
+            height: 1px;
+            margin: 0 10px;
+            background-image: linear-gradient(to right, #C7C7CC 50%, transparent 50%);
+            background-size: 6px 1px;
+            background-repeat: repeat-x;
+        }
+        .route-line::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            width: 5px;
+            height: 5px;
+            background: #1D1D1F;
+            border-radius: 50%;
+            transform: translateY(-50%);
+        }
+        .route-line::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 50%;
+            width: 5px;
+            height: 5px;
+            background: #1D1D1F;
+            border-radius: 50%;
+            transform: translateY(-50%);
+        }
+        .route-plane {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(45deg);
+            background: #FFFFFF;
+            padding: 4px 8px;
+            color: #1D1D1F;
+            line-height: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .route-plane svg { display: block; }
+        .return-stripe .route-plane { background: #FAFAFC; }
+
+        /* Stripe de regreso (variante visual sutil) */
+        .return-stripe { background: #FAFAFC; }
+
+        /* Status pill */
+        .status-pill { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 999px; text-transform: uppercase; }
+        .status-today { background: #1D1D1F; color: white; }
+        .status-soon { background: #FFE5B4; color: #6B3D00; }
+        .status-future { background: #E8F4FF; color: #0058B0; }
+        .status-past { background: #F2F2F7; color: #8E8E93; }
+
+        /* ============ BOTTOM NAVBAR ============ */
+        .bottom-nav {
+            position: fixed;
+            bottom: max(28px, env(safe-area-inset-bottom, 28px));
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 90;
+            background: white;
+            border-radius: 999px;
+            padding: 6px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2);
+            max-width: calc(100vw - 32px);
+        }
+        .nav-item {
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            border-radius: 999px;
+            padding: 10px 12px;
+            color: #8E8E93;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            font-family: inherit;
+            white-space: nowrap;
+            min-width: 42px;
+        }
+        .nav-item svg { flex-shrink: 0; transition: transform 0.3s ease; }
+        .nav-item .nav-label {
+            font-size: 13px;
+            font-weight: 600;
+            max-width: 0;
+            opacity: 0;
+            overflow: hidden;
+            transition: max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+        }
+        .nav-item.active {
+            background: linear-gradient(90deg, #162B7E 0%, #276CF2 100%);
+            color: white;
+            padding: 10px 18px 10px 14px;
+            box-shadow: 0 4px 12px rgba(39, 108, 242, 0.35);
+        }
+        .nav-item.active .nav-label {
+            max-width: 120px;
+            opacity: 1;
+            margin-left: 2px;
+        }
+        .nav-item:not(.active):active { transform: scale(0.92); }
+
+        /* Espaciado para que el contenido no quede tapado por el navbar */
+        body { padding-bottom: 110px; }
+
+        /* ============ MODAL ============ */
+        .overlay { transition: opacity 0.3s ease; opacity: 0; pointer-events: none; }
+        .overlay.active { opacity: 1; pointer-events: auto; }
+
+        #toast { transform: translateY(-80px); opacity: 0; transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s ease; }
+        #toast.show { transform: translateY(20px); opacity: 1; }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        input, select, button { font-family: inherit; }
+        input:focus { outline: none; box-shadow: 0 0 0 2px #007AFF20; }
+
+        .field-wrap { position: relative; }
+        .results-panel {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0; right: 0;
+            background: white;
+            border-radius: 14px;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.10);
+            border: 1px solid #F0F0F2;
+            z-index: 20;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+        .results-panel.hidden { display: none; }
+
+        .seg {
+            background: #F2F2F7; border-radius: 9px; padding: 2px;
+            display: inline-flex; gap: 0;
+        }
+        .seg button {
+            flex: 1; padding: 6px 14px; border-radius: 7px;
+            font-size: 12px; font-weight: 500; color: #1D1D1F;
+            background: transparent; transition: background 0.2s ease;
+        }
+        .seg button.active { background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .live-dot { animation: pulse-dot 2s infinite; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- TOAST -->
+    <div id="toast" class="fixed top-0 left-0 right-0 z-[100] flex justify-center pointer-events-none px-4">
+        <div class="bg-white text-[#1D1D1F] px-4 py-2.5 rounded-full shadow-lg flex items-center gap-2 max-w-sm">
+            <svg id="toast-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span id="toast-text" class="text-[13px] font-medium">Guardado</span>
+        </div>
+    </div>
+
+    <!-- OVERLAYS -->
+    <div id="confirm-overlay" class="overlay fixed inset-0 bg-black/50 backdrop-blur-sm z-[80] flex items-center justify-center px-6" onclick="closeConfirm(event)">
+        <div class="bg-white rounded-3xl p-6 max-w-xs w-full shadow-2xl" onclick="event.stopPropagation()">
+            <h3 class="text-[17px] font-semibold text-center mb-1 text-[#1D1D1F]">¿Eliminar viaje?</h3>
+            <p id="confirm-detail" class="text-[13px] text-gray-500 text-center mb-5">Esta acción no se puede deshacer.</p>
+            <div class="flex gap-2">
+                <button onclick="closeConfirm()" class="flex-1 bg-[#F2F2F7] text-[#1D1D1F] py-3 rounded-xl text-[14px] font-medium">Cancelar</button>
+                <button onclick="confirmDelete()" class="flex-1 bg-[#FF3B30] text-white py-3 rounded-xl text-[14px] font-medium">Eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FLIGHT ACTIONS MODAL (centrado, con blur de fondo) -->
+    <div id="flight-actions-overlay" class="overlay fixed inset-0 z-[80] flex items-center justify-center px-5"
+         style="background: rgba(25, 27, 30, 0.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);"
+         onclick="closeFlightActions(event)">
+        <div id="flight-actions-modal" class="bg-[#F5F5F7] rounded-[28px] shadow-2xl max-w-sm w-full overflow-hidden" onclick="event.stopPropagation()" style="opacity: 0; transform: scale(0.94); transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
+            <!-- Header con close -->
+            <div class="px-5 pt-5 pb-3 flex items-start justify-between">
+                <div>
+                    <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Información del vuelo</p>
+                    <p id="actions-flight-code" class="mono text-[24px] font-bold text-[#1D1D1F] mt-0.5 leading-none">—</p>
+                </div>
+                <button onclick="closeFlightActions()" aria-label="Cerrar" class="w-8 h-8 rounded-full bg-gray-200/70 flex items-center justify-center text-gray-500 active:scale-90 transition-transform flex-shrink-0">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+
+            <div class="px-4 pb-5 pt-1 space-y-2">
+                <button id="action-flightaware" class="w-full bg-white p-4 rounded-2xl flex items-center gap-3 active:bg-gray-50 transition-colors">
+                    <div class="w-10 h-10 rounded-xl bg-[#007AFF]/10 flex items-center justify-center">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#007AFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M12 3v18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4"></path></svg>
+                    </div>
+                    <div class="text-left flex-1">
+                        <p class="text-[14px] font-semibold text-[#1D1D1F]">Estado en vivo</p>
+                        <p class="text-[11px] text-gray-500">FlightAware · hora real, gate, retrasos</p>
+                    </div>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C7C7CC" stroke-width="3" stroke-linecap="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+
+                <button id="action-airline" class="w-full bg-white p-4 rounded-2xl flex items-center gap-3 active:bg-gray-50 transition-colors hidden">
+                    <div id="action-airline-logo" class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0"></div>
+                    <div class="text-left flex-1">
+                        <p id="action-airline-title" class="text-[14px] font-semibold text-[#1D1D1F]">Sitio de la aerolínea</p>
+                        <p class="text-[11px] text-gray-500">Check-in, cambios, equipaje</p>
+                    </div>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C7C7CC" stroke-width="3" stroke-linecap="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+
+                <button id="action-google" class="w-full bg-white p-4 rounded-2xl flex items-center gap-3 active:bg-gray-50 transition-colors">
+                    <div class="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1D1D1F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    </div>
+                    <div class="text-left flex-1">
+                        <p class="text-[14px] font-semibold text-[#1D1D1F]">Buscar en Google</p>
+                        <p class="text-[11px] text-gray-500">Resultados generales del vuelo</p>
+                    </div>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C7C7CC" stroke-width="3" stroke-linecap="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+
+                <button id="action-copy" class="w-full bg-white p-4 rounded-2xl flex items-center gap-3 active:bg-gray-50 transition-colors">
+                    <div class="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1D1D1F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </div>
+                    <div class="text-left flex-1">
+                        <p class="text-[14px] font-semibold text-[#1D1D1F]">Copiar código</p>
+                        <p class="text-[11px] text-gray-500">Guardar en el portapapeles</p>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- HEADER -->
+    <nav class="sticky top-0 z-50 px-5 pt-6 pb-3 bg-[#191B1E]/85 backdrop-blur-md flex items-center justify-between max-w-md mx-auto">
+        <div>
+            <p class="text-[10px] font-semibold text-gray-500 uppercase tracking-[0.18em]">Itinerarios</p>
+            <h1 class="text-[22px] font-semibold text-white tracking-tight mt-0.5">Mis Viajes</h1>
+        </div>
+        <button id="add-btn" onclick="openModal()" aria-label="Añadir viaje" class="w-10 h-10 bg-white text-[#1D1D1F] rounded-full flex items-center justify-center text-xl font-light active:scale-90 transition-transform">+</button>
+    </nav>
+
+    <main class="max-w-md mx-auto px-3 pb-32 pt-2">
+
+        <!-- VISTA: HOME (viajes) -->
+        <section data-view="home">
+            <!-- ESTADO VACÍO -->
+            <div id="empty-state" class="hidden">
+                <div onclick="openModal()" class="bg-white/5 backdrop-blur p-10 border border-dashed border-white/15 cursor-pointer text-center mt-8 rounded-[22px]">
+                    <div class="w-14 h-14 bg-gradient-to-br from-[#007AFF] to-[#5856D6] rounded-2xl flex items-center justify-center mx-auto mb-4 text-white text-2xl">✈</div>
+                    <h2 class="text-[15px] font-semibold text-white mb-1">Tu próximo viaje</h2>
+                    <p class="text-[12px] text-gray-400">Toca para añadir un vuelo</p>
+                </div>
+            </div>
+
+            <!-- LISTA DE VIAJES -->
+            <div id="trips-list" class="space-y-5 mt-2"></div>
+        </section>
+
+        <!-- VISTA: PARTICIPANTES -->
+        <section data-view="participants" class="hidden">
+            <div class="bg-white/5 backdrop-blur p-10 border border-dashed border-white/15 text-center mt-8 rounded-[22px]">
+                <div class="w-14 h-14 bg-gradient-to-br from-[#FF9500] to-[#FF3B30] rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                </div>
+                <h2 class="text-[15px] font-semibold text-white mb-1">Participantes</h2>
+                <p class="text-[12px] text-gray-400 max-w-[260px] mx-auto leading-relaxed">Próximamente: agrega a las personas que viajan contigo, comparte itinerarios y coordina llegadas.</p>
+            </div>
+        </section>
+
+        <!-- VISTA: HOSPEDAJE -->
+        <section data-view="lodging" class="hidden">
+            <div class="bg-white/5 backdrop-blur p-10 border border-dashed border-white/15 text-center mt-8 rounded-[22px]">
+                <div class="w-14 h-14 bg-gradient-to-br from-[#34C759] to-[#00A693] rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"></path><path d="M5 21V7l8-4v18"></path><path d="M19 21V11l-6-4"></path><path d="M9 9h.01"></path><path d="M9 13h.01"></path><path d="M9 17h.01"></path></svg>
+                </div>
+                <h2 class="text-[15px] font-semibold text-white mb-1">Hospedaje</h2>
+                <p class="text-[12px] text-gray-400 max-w-[260px] mx-auto leading-relaxed">Próximamente: registra hoteles y Airbnbs con check-in, check-out, dirección y número de reserva.</p>
+            </div>
+        </section>
+
+        <!-- VISTA: GASTOS -->
+        <section data-view="expenses" class="hidden">
+            <div class="bg-white/5 backdrop-blur p-10 border border-dashed border-white/15 text-center mt-8 rounded-[22px]">
+                <div class="w-14 h-14 bg-gradient-to-br from-[#5856D6] to-[#AF52DE] rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                </div>
+                <h2 class="text-[15px] font-semibold text-white mb-1">Gastos</h2>
+                <p class="text-[12px] text-gray-400 max-w-[260px] mx-auto leading-relaxed">Próximamente: registra gastos del viaje, divídelos entre participantes y lleva un balance.</p>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- BOTTOM NAVBAR -->
+    <nav class="bottom-nav" role="navigation" aria-label="Navegación principal">
+        <button class="nav-item active" data-nav="home" aria-label="Inicio">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+            <span class="nav-label">Viajes</span>
+        </button>
+        <button class="nav-item" data-nav="participants" aria-label="Participantes">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            <span class="nav-label">Participantes</span>
+        </button>
+        <button class="nav-item" data-nav="lodging" aria-label="Hospedaje">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"></path><path d="M5 21V7l8-4v18"></path><path d="M19 21V11l-6-4"></path></svg>
+            <span class="nav-label">Hospedaje</span>
+        </button>
+        <button class="nav-item" data-nav="expenses" aria-label="Gastos">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            <span class="nav-label">Gastos</span>
+        </button>
+    </nav>
+
+    <div id="flight-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"
+         class="fixed inset-0 z-[70] hidden items-start justify-center px-4 pt-6 pb-6 overflow-y-auto"
+         style="background: rgba(25, 27, 30, 0.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);"
+         onclick="closeModal(event)">
+        <div id="flight-modal-inner" class="bg-[#F5F5F7] rounded-[28px] shadow-2xl max-w-md w-full my-auto overflow-hidden" onclick="event.stopPropagation()" style="opacity: 0; transform: scale(0.94); transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
+
+            <!-- Header con close -->
+            <div class="px-5 pt-5 pb-3 bg-[#F5F5F7] flex items-center justify-between sticky top-0 z-10 border-b border-gray-200/50">
+                <button onclick="closeModal()" class="text-[14px] text-[#007AFF] font-normal">Cancelar</button>
+                <h2 id="modal-title" class="text-[15px] font-semibold text-[#1D1D1F]">Nuevo viaje</h2>
+                <button id="save-btn" onclick="saveTrip()" class="text-[14px] text-[#007AFF] font-semibold">Guardar</button>
+            </div>
+
+            <div class="px-5 py-5">
+
+                <div class="flex justify-center mb-5">
+                    <div class="seg">
+                        <button id="seg-oneway" class="active" onclick="setRoundTrip(false)">Solo ida</button>
+                        <button id="seg-round" onclick="setRoundTrip(true)">Ida y vuelta</button>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+            <!-- IDA -->
+            <div class="bg-white p-5 rounded-[20px] shadow-sm space-y-3">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="w-1.5 h-1.5 bg-[#007AFF] rounded-full"></span>
+                    <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Vuelo de ida</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="field-wrap">
+                        <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Origen</label>
+                        <input type="text" id="input-origin" oninput="searchAirports(this, 'res-origin')" onfocus="searchAirports(this, 'res-origin')" placeholder="Ciudad o IATA" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[14px] uppercase border-none" autocomplete="off">
+                        <div id="res-origin" class="results-panel hidden"></div>
+                    </div>
+                    <div class="field-wrap">
+                        <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Destino</label>
+                        <input type="text" id="input-dest" oninput="searchAirports(this, 'res-dest')" onfocus="searchAirports(this, 'res-dest')" placeholder="Ciudad o IATA" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[14px] uppercase border-none" autocomplete="off">
+                        <div id="res-dest" class="results-panel hidden"></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Fecha</label>
+                        <input type="date" id="input-date" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[13px] border-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Hora</label>
+                        <input type="time" id="input-time" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[13px] border-none">
+                    </div>
+                </div>
+
+                <div class="field-wrap">
+                    <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Aerolínea</label>
+                    <input type="text" id="input-airline" oninput="searchAirlines(this, 'res-airline')" onfocus="searchAirlines(this, 'res-airline')" placeholder="Selecciona" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[14px] border-none" autocomplete="off">
+                    <div id="res-airline" class="results-panel hidden"></div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Código de vuelo</label>
+                        <input type="text" id="input-flight-no" placeholder="Ej. AM404" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[14px] uppercase border-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Asiento</label>
+                        <input type="text" id="input-seat" placeholder="Ej. 12A" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[14px] uppercase border-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Terminal</label>
+                        <input type="text" id="input-terminal" placeholder="Ej. 2" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[14px] uppercase border-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Sala / Gate</label>
+                        <input type="text" id="input-gate" placeholder="Ej. 18" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[14px] uppercase border-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Pasajero</label>
+                    <input type="text" id="input-passenger" placeholder="Nombre completo" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[14px] border-none">
+                </div>
+            </div>
+
+            <!-- REGRESO -->
+            <div id="form-section-return" class="bg-white p-5 rounded-[20px] shadow-sm space-y-3 hidden">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="w-1.5 h-1.5 bg-[#34C759] rounded-full"></span>
+                    <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Vuelo de regreso</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="field-wrap">
+                        <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Origen</label>
+                        <input type="text" id="input-origin-ret" oninput="searchAirports(this, 'res-origin-ret')" onfocus="searchAirports(this, 'res-origin-ret')" placeholder="Auto" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[14px] uppercase border-none" autocomplete="off">
+                        <div id="res-origin-ret" class="results-panel hidden"></div>
+                    </div>
+                    <div class="field-wrap">
+                        <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Destino</label>
+                        <input type="text" id="input-dest-ret" oninput="searchAirports(this, 'res-dest-ret')" onfocus="searchAirports(this, 'res-dest-ret')" placeholder="Auto" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[14px] uppercase border-none" autocomplete="off">
+                        <div id="res-dest-ret" class="results-panel hidden"></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Fecha</label>
+                        <input type="date" id="input-date-ret" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[13px] border-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Hora</label>
+                        <input type="time" id="input-time-ret" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[13px] border-none">
+                    </div>
+                </div>
+
+                <div class="field-wrap">
+                    <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Aerolínea</label>
+                    <input type="text" id="input-airline-ret" oninput="searchAirlines(this, 'res-airline-ret')" onfocus="searchAirlines(this, 'res-airline-ret')" placeholder="Selecciona" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[14px] border-none" autocomplete="off">
+                    <div id="res-airline-ret" class="results-panel hidden"></div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Código</label>
+                        <input type="text" id="input-flight-no-ret" placeholder="Ej. AM405" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[14px] uppercase border-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Asiento</label>
+                        <input type="text" id="input-seat-ret" placeholder="Ej. 14C" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[14px] uppercase border-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Terminal</label>
+                        <input type="text" id="input-terminal-ret" placeholder="—" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[14px] uppercase border-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wide">Sala / Gate</label>
+                        <input type="text" id="input-gate-ret" placeholder="—" class="w-full bg-[#FBFBFD] p-3 rounded-xl text-[14px] uppercase border-none">
+                    </div>
+                </div>
+            </div>
+
+            <button id="delete-trip-btn" onclick="deleteCurrentEditing()" class="w-full bg-[#FF3B30] text-white py-3.5 rounded-[20px] text-[14px] font-semibold hidden active:scale-[0.98] transition-transform">
+                Eliminar viaje
+            </button>
+
+            <p class="text-[11px] text-gray-400 text-center px-4 pt-2 leading-relaxed">
+                Los datos se guardan únicamente en este dispositivo.
+            </p>
+                </div> <!-- /.space-y-4 -->
+            </div> <!-- /.px-5.py-5 -->
+        </div> <!-- /#flight-modal-inner -->
+    </div>
+
+    <script>
+        // ========== DATA ==========
+        const airports = [
+            { code: 'ACA', city: 'Acapulco' },
+            { code: 'AGU', city: 'Aguascalientes' },
+            { code: 'BJX', city: 'Bajío / Silao' },
+            { code: 'CPE', city: 'Campeche' },
+            { code: 'CAN', city: 'Cananea' },
+            { code: 'CUN', city: 'Cancún' },
+            { code: 'CUU', city: 'Chihuahua' },
+            { code: 'CME', city: 'Ciudad del Carmen' },
+            { code: 'CEN', city: 'Ciudad Obregón' },
+            { code: 'CJS', city: 'Ciudad Juárez' },
+            { code: 'CVM', city: 'Ciudad Victoria' },
+            { code: 'CZM', city: 'Cozumel' },
+            { code: 'CUL', city: 'Culiacán' },
+            { code: 'MEX', city: 'Ciudad de México', sub: 'AICM' },
+            { code: 'NLU', city: 'Ciudad de México', sub: 'AIFA' },
+            { code: 'DGO', city: 'Durango' },
+            { code: 'ENS', city: 'Ensenada' },
+            { code: 'GDL', city: 'Guadalajara' },
+            { code: 'GYM', city: 'Guaymas' },
+            { code: 'HMO', city: 'Hermosillo' },
+            { code: 'HUX', city: 'Huatulco' },
+            { code: 'LAP', city: 'La Paz' },
+            { code: 'LMM', city: 'Los Mochis' },
+            { code: 'ZLO', city: 'Manzanillo' },
+            { code: 'MAM', city: 'Matamoros' },
+            { code: 'MAZ', city: 'Mazatlán' },
+            { code: 'MID', city: 'Mérida' },
+            { code: 'MXL', city: 'Mexicali' },
+            { code: 'MTY', city: 'Monterrey' },
+            { code: 'MLM', city: 'Morelia' },
+            { code: 'NVJ', city: 'Navojoa' },
+            { code: 'NOG', city: 'Nogales' },
+            { code: 'NLD', city: 'Nuevo Laredo' },
+            { code: 'OAX', city: 'Oaxaca' },
+            { code: 'PAZ', city: 'Poza Rica' },
+            { code: 'PBC', city: 'Puebla' },
+            { code: 'PXM', city: 'Puerto Escondido' },
+            { code: 'PVR', city: 'Puerto Vallarta' },
+            { code: 'QRO', city: 'Querétaro' },
+            { code: 'REX', city: 'Reynosa' },
+            { code: 'SJD', city: 'San José del Cabo' },
+            { code: 'SLP', city: 'San Luis Potosí' },
+            { code: 'TAM', city: 'Tampico' },
+            { code: 'TAP', city: 'Tapachula' },
+            { code: 'TIJ', city: 'Tijuana' },
+            { code: 'TLC', city: 'Toluca' },
+            { code: 'TRC', city: 'Torreón' },
+            { code: 'TGZ', city: 'Tuxtla Gutiérrez' },
+            { code: 'VER', city: 'Veracruz' },
+            { code: 'VSA', city: 'Villahermosa' },
+            { code: 'ZCL', city: 'Zacatecas' },
+            { code: 'ZIH', city: 'Zihuatanejo' },
+            { code: 'UPN', city: 'Uruapan' },
+            { code: 'TQO', city: 'Tulum' },
+            { code: 'CLQ', city: 'Colima' },
+            { code: 'LTO', city: 'Loreto' },
+            { code: 'MTT', city: 'Minatitlán' },
+            { code: 'PQM', city: 'Palenque' },
+            { code: 'TCN', city: 'Tehuacán' },
+            { code: 'TSL', city: 'Tamuín' },
+            { code: 'TPQ', city: 'Tepic' },
+            { code: 'LOV', city: 'Monclova' },
+            { code: 'VME', city: 'Villa de las Flores' },
+            { code: 'SNC', city: 'Salina Cruz' },
+            { code: 'TUY', city: 'Tulum', sub: 'Militar/Civil' },
+            { code: 'IZT', city: 'Ixtepec' }
+        ];
+
+        const airlines = [
+            { name: 'Aeroméxico', short: 'AM', color: '#0033A0', text: '#FFFFFF', domain: 'aeromexico.com',  site: 'https://www.aeromexico.com' },
+            { name: 'Volaris',    short: 'Y4', color: '#A41E8E', text: '#FFFFFF', domain: 'volaris.com',     site: 'https://www.volaris.com' },
+            { name: 'Viva',       short: 'VB', color: '#00A650', text: '#FFFFFF', domain: 'vivaaerobus.com', site: 'https://www.vivaaerobus.com' },
+            { name: 'Mexicana',   short: 'MX', color: '#9B1B30', text: '#FFFFFF', domain: 'mexicana.gob.mx', site: 'https://mexicana.gob.mx' }
+        ];
+
+        // Cache de URL del favicon (Google s2/favicons - siempre disponible, alta resolución)
+        function airlineLogoURL(airline) {
+            if (!airline || !airline.domain) return null;
+            return `https://www.google.com/s2/favicons?domain=${airline.domain}&sz=64`;
+        }
+
+        // ========== STATE ==========
+        let trips = JSON.parse(localStorage.getItem('trips_v3') || '[]');
+        let editingId = null;
+        let pendingDeleteId = null;
+        let isRoundTrip = false;
+
+        // ========== UTILS ==========
+        function uid() { return 't_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+        function saveAll() { localStorage.setItem('trips_v3', JSON.stringify(trips)); }
+        function airportByCode(code) { return airports.find(a => a.code === code); }
+        function airlineByName(name) { return airlines.find(a => a.name === name); }
+
+        function formatBoardingDate(date) {
+            if (!date) return '—';
+            const [y, m, d] = date.split('-');
+            const dt = new Date(y, m-1, d);
+            return dt.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g,'/');
+        }
+
+        function timeUntil(dateStr, timeStr) {
+            if (!dateStr) return null;
+            const t = timeStr || '12:00';
+            const target = new Date(dateStr + 'T' + t + ':00').getTime();
+            return target - Date.now();
+        }
+
+        function statusOf(trip) {
+            const ms = timeUntil(trip.date, trip.time);
+            if (ms === null) return { label: 'BORRADOR', cls: 'status-past' };
+            const day = 86400000;
+            if (ms < -day) return { label: 'COMPLETADO', cls: 'status-past' };
+            if (ms < day && ms > -day) return { label: 'HOY', cls: 'status-today' };
+            if (ms < day * 7) return { label: 'PRÓXIMO', cls: 'status-soon' };
+            return { label: 'PROGRAMADO', cls: 'status-future' };
+        }
+
+        function countdownText(trip) {
+            const ms = timeUntil(trip.date, trip.time);
+            if (ms === null) return '';
+            if (ms < 0) {
+                const past = Math.abs(ms);
+                if (past < 3600000) return 'Despegó hace minutos';
+                if (past < 86400000) return `Hace ${Math.floor(past/3600000)} h`;
+                return `Hace ${Math.floor(past/86400000)} días`;
+            }
+            const days = Math.floor(ms / 86400000);
+            const hours = Math.floor((ms % 86400000) / 3600000);
+            const mins = Math.floor((ms % 3600000) / 60000);
+            if (days > 0) return `Faltan ${days} ${days===1?'día':'días'}${hours>0?` · ${hours}h`:''}`;
+            if (hours > 0) return `Faltan ${hours}h ${mins}m`;
+            return `Faltan ${mins} min`;
+        }
+
+        // ========== TOAST ==========
+        function toast(text, isError = false) {
+            const t = document.getElementById('toast');
+            const icon = document.getElementById('toast-icon');
+            const inner = t.querySelector('div');
+            document.getElementById('toast-text').textContent = text;
+            inner.style.background = isError ? '#FF3B30' : 'white';
+            inner.style.color = isError ? 'white' : '#1D1D1F';
+            icon.innerHTML = isError
+                ? '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>'
+                : '<polyline points="20 6 9 17 4 12"></polyline>';
+            t.classList.add('show');
+            clearTimeout(t._timer);
+            t._timer = setTimeout(() => t.classList.remove('show'), 2200);
+        }
+
+        // ========== AIRLINE LOGO ==========
+        function airlineBadge(name, size = 'sm') {
+            const a = airlineByName(name);
+            const dim = size === 'lg' ? 'w-9 h-9' : 'w-6 h-6';
+            const fontSize = size === 'lg' ? 'text-[11px]' : 'text-[9px]';
+            if (!a) {
+                return `<div class="${dim} ${fontSize} rounded-md bg-[#F2F2F7] flex items-center justify-center text-gray-400 font-bold">?</div>`;
+            }
+            const logoURL = airlineLogoURL(a);
+            // Logo real sobre fondo blanco con borde sutil; monograma como fallback si la imagen falla
+            const fallback = `<div class='${dim} ${fontSize} rounded-md flex items-center justify-center font-bold tracking-tight' style='background:${a.color};color:${a.text}'>${a.short}</div>`;
+            return `
+                <div class="${dim} rounded-md bg-white border border-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+                    <img src="${logoURL}" alt="${a.name}" class="w-full h-full object-contain p-0.5"
+                         onerror="this.parentElement.outerHTML=&quot;${fallback.replace(/"/g, '&quot;').replace(/'/g, '&quot;')}&quot;">
+                </div>
+            `;
+        }
+
+        // ========== RENDER (lista de tickets completos) ==========
+        function render() {
+            const list = document.getElementById('trips-list');
+            const empty = document.getElementById('empty-state');
+
+            if (trips.length === 0) {
+                empty.classList.remove('hidden');
+                list.innerHTML = '';
+                return;
+            }
+            empty.classList.add('hidden');
+
+            const sorted = [...trips].sort((a, b) => {
+                const ta = timeUntil(a.date, a.time) ?? Infinity;
+                const tb = timeUntil(b.date, b.time) ?? Infinity;
+                const ap = ta < 0, bp = tb < 0;
+                if (ap !== bp) return ap ? 1 : -1;
+                return Math.abs(ta) - Math.abs(tb);
+            });
+
+            list.innerHTML = sorted.map(trip => renderTripGroup(trip)).join('');
+
+            // Bind acciones
+            list.querySelectorAll('button[data-flight-action]').forEach(btn => {
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    openFlightActions(decodeURIComponent(btn.dataset.flightAction), btn.dataset.airline);
+                };
+            });
+            list.querySelectorAll('button[data-edit-trip]').forEach(btn => {
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    openModal(btn.dataset.editTrip);
+                };
+            });
+
+            // Cargar clima del destino para cada ticket (asíncrono)
+            loadWeatherForTickets(list);
+        }
+
+        function renderTripGroup(trip) {
+            // Botón "Editar" flotante encima del ticket
+            const editBtn = `
+                <div class="flex items-center justify-between mb-2 px-1">
+                    <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-[0.18em]">${trip.roundTrip ? 'Viaje · Ida y vuelta' : 'Viaje · Solo ida'}</span>
+                    <button data-edit-trip="${trip.id}" class="text-[12px] text-white/80 font-semibold flex items-center gap-1 active:scale-95 transition-transform px-2 py-1 rounded-full hover:bg-white/5">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                        Editar
+                    </button>
+                </div>
+            `;
+
+            let html = editBtn;
+            html += renderFullTicket(trip, false);
+            if (trip.roundTrip) html += '<div class="h-3"></div>' + renderFullTicket(trip, true);
+            return `<div class="trip-group">${html}</div>`;
+        }
+
+        // ========== AIRPORT COORDINATES (para distancia y duración aproximada) ==========
+        const airportCoords = {
+            'ACA': [16.757, -99.754], 'AGU': [21.706, -102.318], 'BJX': [20.993, -101.481],
+            'CPE': [19.817, -90.500], 'CAN': [30.973, -110.318], 'CUN': [21.037, -86.877],
+            'CUU': [28.703, -105.965], 'CME': [18.654, -91.799], 'CEN': [27.393, -109.833],
+            'CJS': [31.636, -106.429], 'CVM': [23.703, -98.957], 'CZM': [20.522, -86.926],
+            'CUL': [24.764, -107.475], 'MEX': [19.436, -99.072], 'NLU': [19.741, -99.015],
+            'DGO': [24.124, -104.528], 'ENS': [31.795, -116.603], 'GDL': [20.522, -103.310],
+            'GYM': [27.969, -110.925], 'HMO': [29.096, -111.048], 'HUX': [15.775, -96.262],
+            'LAP': [24.073, -110.362], 'LMM': [25.685, -109.081], 'ZLO': [19.145, -104.559],
+            'MAM': [25.770, -97.525], 'MAZ': [23.161, -106.266], 'MID': [20.937, -89.658],
+            'MXL': [32.630, -115.241], 'MTY': [25.778, -100.107], 'MLM': [19.850, -101.025],
+            'NVJ': [27.080, -109.455], 'NOG': [31.226, -110.976], 'NLD': [27.444, -99.571],
+            'OAX': [17.000, -96.726], 'PAZ': [20.602, -97.461], 'PBC': [19.158, -98.371],
+            'PXM': [15.876, -97.090], 'PVR': [20.680, -105.254], 'QRO': [20.617, -100.186],
+            'REX': [26.009, -98.229], 'SJD': [23.151, -109.722], 'SLP': [22.255, -100.931],
+            'TAM': [22.296, -97.866], 'TAP': [14.794, -92.370], 'TIJ': [32.541, -116.970],
+            'TLC': [19.337, -99.566], 'TRC': [25.568, -103.411], 'TGZ': [16.564, -93.022],
+            'VER': [19.146, -96.187], 'VSA': [17.997, -92.817], 'ZCL': [22.897, -102.687],
+            'ZIH': [17.602, -101.461], 'UPN': [19.397, -102.039], 'TQO': [20.232, -87.602],
+            'CLQ': [19.277, -103.577], 'LTO': [25.989, -111.348], 'MTT': [18.103, -94.581],
+            'PQM': [17.534, -91.984], 'TCN': [18.498, -97.420], 'TSL': [21.999, -98.806],
+            'TPQ': [21.419, -104.843], 'LOV': [26.956, -101.470], 'VME': [29.100, -110.500],
+            'SNC': [16.211, -95.202], 'TUY': [20.236, -87.534], 'IZT': [16.450, -95.094]
+        };
+
+        // Calcula distancia haversine en km
+        function distanceKm(origin, dest) {
+            const a = airportCoords[origin], b = airportCoords[dest];
+            if (!a || !b) return null;
+            const toRad = d => d * Math.PI / 180;
+            const R = 6371;
+            const dLat = toRad(b[0] - a[0]);
+            const dLon = toRad(b[1] - a[1]);
+            const lat1 = toRad(a[0]), lat2 = toRad(b[0]);
+            const x = Math.sin(dLat/2)**2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon/2)**2;
+            return Math.round(2 * R * Math.asin(Math.sqrt(x)));
+        }
+
+        // Estima duración del vuelo. Velocidad comercial: ~750 km/h promedio + 25 min de taxi/aproximación
+        function estimateDuration(origin, dest) {
+            const km = distanceKm(origin, dest);
+            if (!km) return '—';
+            const totalMin = Math.round((km / 750) * 60 + 25);
+            const h = Math.floor(totalMin / 60);
+            const m = totalMin % 60;
+            if (h === 0) return `${m}m`;
+            return m === 0 ? `${h}h` : `${h}h ${m}m`;
+        }
+
+        function getDistanceLabel(origin, dest) {
+            const km = distanceKm(origin, dest);
+            return km ? `${km.toLocaleString('es-MX')} km` : 'aprox.';
+        }
+
+        // ========== WEATHER (wttr.in - sin API key, sin CORS) ==========
+        const weatherCache = {}; // { code: { temp, desc, icon, ts } }
+        const WEATHER_TTL = 30 * 60 * 1000; // 30 min
+
+        // Mapa de códigos de wttr a SVG icons (simplificado a categorías visuales)
+        function weatherIconSVG(code) {
+            const c = parseInt(code);
+            // Soleado / despejado
+            if ([113].includes(c)) return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFB100" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>`;
+            // Parcialmente nublado
+            if ([116, 119].includes(c)) return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="M20 12h2"></path><path d="m19.07 4.93-1.41 1.41"></path><path d="M15.947 12.65a4 4 0 0 0-5.925-4.128"></path><path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"></path></svg>`;
+            // Nublado
+            if ([122, 143, 248, 260].includes(c)) return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 1 0 0-9h-1.8A7 7 0 1 0 4 16.9"></path></svg>`;
+            // Lluvia
+            if ([176, 263, 266, 281, 284, 293, 296, 299, 302, 305, 308, 311, 314, 317, 320, 353, 356, 359].includes(c))
+                return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5AC8FA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path><path d="M16 14v6"></path><path d="M8 14v6"></path><path d="M12 16v6"></path></svg>`;
+            // Tormenta
+            if ([200, 386, 389, 392, 395].includes(c))
+                return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFB100" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 16.9A5 5 0 0 0 18 7h-1.26a8 8 0 1 0-11.62 9"></path><polyline points="13 11 9 17 15 17 11 23"></polyline></svg>`;
+            // Nieve
+            if ([179, 182, 185, 227, 230, 323, 326, 329, 332, 335, 338, 350, 362, 365, 368, 371, 374, 377].includes(c))
+                return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5AC8FA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25"></path><path d="M8 16h.01"></path><path d="M8 20h.01"></path><path d="M12 18h.01"></path><path d="M12 22h.01"></path><path d="M16 16h.01"></path><path d="M16 20h.01"></path></svg>`;
+            // Niebla
+            if ([143, 248, 260].includes(c))
+                return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h18"></path><path d="M3 12h18"></path><path d="M3 16h18"></path></svg>`;
+            // Default: soleado
+            return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFB100" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path></svg>`;
+        }
+
+        async function fetchWeather(iataCode) {
+            if (!iataCode || !airportCoords[iataCode]) return null;
+
+            // Cache hit
+            const cached = weatherCache[iataCode];
+            if (cached && Date.now() - cached.ts < WEATHER_TTL) return cached;
+
+            const [lat, lon] = airportCoords[iataCode];
+            try {
+                const res = await fetch(`https://wttr.in/${lat},${lon}?format=j1`);
+                if (!res.ok) return null;
+                const data = await res.json();
+                const cur = data.current_condition?.[0];
+                if (!cur) return null;
+                const result = {
+                    temp: cur.temp_C,
+                    desc: cur.lang_es?.[0]?.value || cur.weatherDesc?.[0]?.value || '',
+                    code: cur.weatherCode,
+                    ts: Date.now()
+                };
+                weatherCache[iataCode] = result;
+                return result;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function loadWeatherForTickets(rootEl) {
+            const targets = rootEl.querySelectorAll('[data-weather-target]');
+            for (const el of targets) {
+                const code = el.dataset.weatherTarget;
+                if (!code) continue;
+                const w = await fetchWeather(code);
+                if (!w) {
+                    el.querySelector('[data-weather-temp]').textContent = '—';
+                    el.querySelector('[data-weather-desc]').textContent = 'Sin datos';
+                    continue;
+                }
+                el.querySelector('[data-weather-temp]').textContent = `${w.temp}°C`;
+                el.querySelector('[data-weather-desc]').textContent = w.desc;
+                el.querySelector('[data-weather-icon]').innerHTML = weatherIconSVG(w.code);
+            }
+        }
+
+        function renderFullTicket(trip, isReturn) {
+            const origin = isReturn ? (trip.originRet || trip.dest) : trip.origin;
+            const dest = isReturn ? (trip.destRet || trip.origin) : trip.dest;
+            const date = isReturn ? trip.dateRet : trip.date;
+            const time = isReturn ? trip.timeRet : trip.time;
+            const airline = isReturn ? trip.airlineRet : trip.airline;
+            const flightNo = isReturn ? trip.flightNoRet : trip.flightNo;
+            const terminal = isReturn ? trip.terminalRet : trip.terminal;
+            const gate = isReturn ? trip.gateRet : trip.gate;
+            const seat = isReturn ? trip.seatRet : trip.seat;
+            const passenger = trip.passenger;
+
+            const oCity = airportByCode(origin)?.city || origin || '—';
+            const dCity = airportByCode(dest)?.city || dest || '—';
+            const dateDisplay = formatBoardingDate(date);
+            const accent = isReturn ? '#00875A' : '#1D1D1F';
+            const label = isReturn ? 'REGRESO' : 'IDA';
+
+            // Calcular status y countdown específicos para este tramo (ida o regreso)
+            const legStatus = statusOf({ date, time });
+            const legCountdown = countdownText({ date, time });
+
+            return `
+                <div class="boarding-pass shadow-2xl shadow-black/40 overflow-hidden">
+                    <div class="flex items-center justify-between px-5 pt-4 pb-3">
+                        <span class="status-pill ${legStatus.cls}">${legStatus.label}</span>
+                        ${legCountdown ? `<span class="text-[11px] text-gray-500 font-medium flex items-center gap-1.5">
+                            ${legStatus.label === 'HOY' ? '<span class="w-1.5 h-1.5 bg-[#FF3B30] rounded-full live-dot"></span>' : ''}
+                            ${legCountdown}
+                        </span>` : ''}
+                    </div>
+
+                    <!-- Top: aerolínea + label tramo -->
+                    <div class="flex items-center justify-between px-5 pt-2 pb-3">
+                        <div class="flex items-center gap-2">
+                            ${airlineBadge(airline, 'sm')}
+                            <span class="mono text-[11px] font-semibold text-[#1D1D1F] tracking-wide">${flightNo || '—'}</span>
+                        </div>
+                        <span class="text-[9px] font-bold uppercase tracking-[0.18em]" style="color:${accent}">${label}</span>
+                    </div>
+
+                    <!-- Ruta principal -->
+                    <div class="px-5 pb-4">
+                        <div class="flex items-center justify-between mb-1">
+                            <p class="mono text-[36px] font-bold text-[#1D1D1F] tracking-tight leading-none">${origin || '—'}</p>
+                            <div class="route-line">
+                                <span class="route-plane">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>
+                                </span>
+                            </div>
+                            <p class="mono text-[36px] font-bold text-[#1D1D1F] tracking-tight leading-none">${dest || '—'}</p>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <p class="text-[11px] text-gray-500 font-medium truncate max-w-[40%]">${oCity}</p>
+                            <p class="text-[11px] text-gray-500 font-medium truncate max-w-[40%] text-right">${dCity}</p>
+                        </div>
+                    </div>
+
+                    <!-- Datos: salida / pasajero / asiento -->
+                    <div class="px-5 pb-4 grid grid-cols-3 gap-2">
+                        <div>
+                            <p class="text-[9px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">Salida</p>
+                            <p class="mono text-[15px] font-bold text-[#1D1D1F] leading-tight">${time || '—'}</p>
+                            <p class="text-[10px] text-gray-400 mt-0.5">${dateDisplay}</p>
+                        </div>
+                        <div>
+                            <p class="text-[9px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">Pasajero</p>
+                            <p class="text-[12px] font-semibold text-[#1D1D1F] leading-tight truncate">${passenger || '—'}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[9px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">Asiento</p>
+                            <p class="mono text-[15px] font-bold text-[#1D1D1F] leading-tight">${seat || '—'}</p>
+                        </div>
+                    </div>
+
+                    <!-- Línea perforada -->
+                    <div class="pass-notch-wrap"><div class="pass-perf"></div></div>
+
+                    <!-- Stub: terminal / gate / vuelo -->
+                    <div class="px-5 pt-4 pb-3 grid grid-cols-3 gap-2">
+                        <div>
+                            <p class="text-[9px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">Terminal</p>
+                            <p class="mono text-[18px] font-bold text-[#1D1D1F] leading-none">${terminal || '—'}</p>
+                        </div>
+                        <div>
+                            <p class="text-[9px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">Sala</p>
+                            <p class="mono text-[18px] font-bold text-[#1D1D1F] leading-none">${gate || '—'}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[9px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">Vuelo</p>
+                            ${flightNo ? `<button data-flight-action="${encodeURIComponent(flightNo)}" data-airline="${airline || ''}" class="mono text-[15px] font-bold text-[#007AFF] leading-none inline-flex items-center gap-1">
+                                ${flightNo}
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="opacity-60"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </button>` : `<p class="mono text-[15px] font-bold text-gray-300 leading-none">—</p>`}
+                        </div>
+                    </div>
+
+                    <!-- Sección clima destino + duración -->
+                    <div class="mx-4 mb-4 mt-1 p-3 rounded-2xl bg-[#F5F5F7] flex items-stretch gap-2">
+                        <!-- Clima del destino -->
+                        <div class="flex-1 flex items-center gap-3 px-2 py-1" data-weather-target="${dest || ''}">
+                            <div class="w-9 h-9 rounded-xl bg-white flex items-center justify-center flex-shrink-0" data-weather-icon>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFB100" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-[9px] text-gray-400 font-medium uppercase tracking-wider leading-none">Destino</p>
+                                <p class="text-[15px] font-bold text-[#1D1D1F] leading-tight mt-1" data-weather-temp>—</p>
+                                <p class="text-[10px] text-gray-500 truncate leading-none mt-0.5" data-weather-desc>Cargando...</p>
+                            </div>
+                        </div>
+
+                        <!-- Separador vertical -->
+                        <div class="w-px bg-gray-200"></div>
+
+                        <!-- Duración del vuelo -->
+                        <div class="flex-1 flex items-center gap-3 px-2 py-1">
+                            <div class="w-9 h-9 rounded-xl bg-white flex items-center justify-center flex-shrink-0">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1D1D1F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-[9px] text-gray-400 font-medium uppercase tracking-wider leading-none">Duración</p>
+                                <p class="text-[15px] font-bold text-[#1D1D1F] leading-tight mt-1">${estimateDuration(origin, dest)}</p>
+                                <p class="text-[10px] text-gray-500 leading-none mt-0.5">${getDistanceLabel(origin, dest)}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ========== FLIGHT ACTIONS MODAL ==========
+        let currentFlightAction = { code: null, airline: null };
+
+        function openFlightActions(flightCode, airlineName) {
+            currentFlightAction = { code: flightCode, airline: airlineName };
+            document.getElementById('actions-flight-code').textContent = flightCode;
+
+            // Configurar botón de aerolínea (solo si la conocemos)
+            const airline = airlineByName(airlineName);
+            const airlineBtn = document.getElementById('action-airline');
+            if (airline) {
+                airlineBtn.classList.remove('hidden');
+                document.getElementById('action-airline-title').textContent = airline.name;
+                document.getElementById('action-airline-logo').innerHTML = `
+                    <img src="${airlineLogoURL(airline)}" alt="${airline.name}" class="w-full h-full object-contain p-1"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div class="w-full h-full hidden items-center justify-center text-[11px] font-bold rounded-xl" style="background:${airline.color};color:${airline.text}">${airline.short}</div>
+                `;
+            } else {
+                airlineBtn.classList.add('hidden');
+            }
+
+            const overlay = document.getElementById('flight-actions-overlay');
+            const modal = document.getElementById('flight-actions-modal');
+            overlay.classList.add('active');
+            requestAnimationFrame(() => {
+                modal.style.opacity = '1';
+                modal.style.transform = 'scale(1)';
+            });
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeFlightActions(e) {
+            // Si recibe evento, solo cerrar si el click fue sobre el overlay (no sobre el modal)
+            if (e && e.target.closest('#flight-actions-modal')) return;
+            const overlay = document.getElementById('flight-actions-overlay');
+            const modal = document.getElementById('flight-actions-modal');
+            modal.style.opacity = '0';
+            modal.style.transform = 'scale(0.94)';
+            overlay.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        document.getElementById('action-flightaware').addEventListener('click', () => {
+            if (!currentFlightAction.code) return;
+            window.open(`https://flightaware.com/live/flight/${encodeURIComponent(currentFlightAction.code)}`, '_blank', 'noopener');
+            closeFlightActions();
+        });
+        document.getElementById('action-airline').addEventListener('click', () => {
+            const airline = airlineByName(currentFlightAction.airline);
+            if (!airline) return;
+            window.open(airline.site, '_blank', 'noopener');
+            closeFlightActions();
+        });
+        document.getElementById('action-google').addEventListener('click', () => {
+            if (!currentFlightAction.code) return;
+            window.open(`https://www.google.com/search?q=vuelo+${encodeURIComponent(currentFlightAction.code)}`, '_blank', 'noopener');
+            closeFlightActions();
+        });
+        document.getElementById('action-copy').addEventListener('click', async () => {
+            if (!currentFlightAction.code) return;
+            try {
+                await navigator.clipboard.writeText(currentFlightAction.code);
+                toast(`${currentFlightAction.code} copiado`);
+            } catch {
+                toast('No se pudo copiar', true);
+            }
+            closeFlightActions();
+        });
+
+        // ========== SEARCH ==========
+        function searchAirports(input, panelId) {
+            const val = input.value.trim().toUpperCase();
+            const panel = document.getElementById(panelId);
+            const filtered = val.length === 0
+                ? airports.slice(0, 6)
+                : airports.filter(a => a.code.includes(val) || a.city.toUpperCase().includes(val)).slice(0, 6);
+
+            if (filtered.length === 0) { panel.classList.add('hidden'); return; }
+            panel.classList.remove('hidden');
+            panel.innerHTML = filtered.map(a => `
+                <div class="px-3 py-2.5 border-b border-gray-50 last:border-0 flex items-center justify-between cursor-pointer hover:bg-gray-50" data-code="${a.code}">
+                    <p class="text-[13px] font-medium text-[#1D1D1F]">${a.city}${a.sub ? ` <span class="text-gray-400 text-[11px]">${a.sub}</span>` : ''}</p>
+                    <span class="text-[11px] font-semibold text-gray-400 tracking-wider">${a.code}</span>
+                </div>
+            `).join('');
+            panel.querySelectorAll('[data-code]').forEach(el => {
+                el.onclick = (e) => {
+                    e.stopPropagation();
+                    input.value = el.dataset.code;
+                    panel.classList.add('hidden');
+                };
+            });
+        }
+
+        function searchAirlines(input, panelId) {
+            const val = input.value.trim().toUpperCase();
+            const panel = document.getElementById(panelId);
+            const filtered = val.length === 0
+                ? airlines
+                : airlines.filter(a => a.name.toUpperCase().includes(val));
+
+            if (filtered.length === 0) { panel.classList.add('hidden'); return; }
+            panel.classList.remove('hidden');
+            panel.innerHTML = filtered.map(a => `
+                <div class="px-3 py-2.5 border-b border-gray-50 last:border-0 flex items-center gap-3 cursor-pointer hover:bg-gray-50" data-name="${a.name}">
+                    <div class="w-8 h-8 rounded-md bg-white border border-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+                        <img src="${airlineLogoURL(a)}" alt="${a.name}" class="w-full h-full object-contain p-0.5"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <div class="w-full h-full hidden items-center justify-center text-[10px] font-bold" style="background:${a.color};color:${a.text}">${a.short}</div>
+                    </div>
+                    <span class="text-[14px] font-medium text-[#1D1D1F]">${a.name}</span>
+                </div>
+            `).join('');
+            panel.querySelectorAll('[data-name]').forEach(el => {
+                el.onclick = (e) => {
+                    e.stopPropagation();
+                    input.value = el.dataset.name;
+                    panel.classList.add('hidden');
+                };
+            });
+        }
+
+        document.addEventListener('click', (e) => {
+            document.querySelectorAll('.results-panel').forEach(p => {
+                if (!p.parentElement.contains(e.target)) p.classList.add('hidden');
+            });
+        });
+
+        // ========== MODAL ==========
+        function clearForm() {
+            ['input-airline','input-flight-no','input-origin','input-dest','input-date','input-time',
+             'input-terminal','input-gate','input-seat','input-passenger',
+             'input-airline-ret','input-flight-no-ret','input-origin-ret','input-dest-ret','input-date-ret','input-time-ret',
+             'input-terminal-ret','input-gate-ret','input-seat-ret']
+            .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+            setRoundTrip(false);
+        }
+
+        function setRoundTrip(val) {
+            isRoundTrip = val;
+            document.getElementById('seg-oneway').classList.toggle('active', !val);
+            document.getElementById('seg-round').classList.toggle('active', val);
+            document.getElementById('form-section-return').classList.toggle('hidden', !val);
+        }
+
+        function openModal(tripId = null) {
+            editingId = tripId;
+            clearForm();
+
+            const modal = document.getElementById('flight-modal');
+            const inner = document.getElementById('flight-modal-inner');
+            const title = document.getElementById('modal-title');
+            const delBtn = document.getElementById('delete-trip-btn');
+
+            if (tripId) {
+                const trip = trips.find(t => t.id === tripId);
+                if (trip) {
+                    title.textContent = 'Editar viaje';
+                    delBtn.classList.remove('hidden');
+                    document.getElementById('input-airline').value = trip.airline || '';
+                    document.getElementById('input-flight-no').value = trip.flightNo || '';
+                    document.getElementById('input-origin').value = trip.origin || '';
+                    document.getElementById('input-dest').value = trip.dest || '';
+                    document.getElementById('input-date').value = trip.date || '';
+                    document.getElementById('input-time').value = trip.time || '';
+                    document.getElementById('input-terminal').value = trip.terminal || '';
+                    document.getElementById('input-gate').value = trip.gate || '';
+                    document.getElementById('input-seat').value = trip.seat || '';
+                    document.getElementById('input-passenger').value = trip.passenger || '';
+                    setRoundTrip(!!trip.roundTrip);
+                    if (trip.roundTrip) {
+                        document.getElementById('input-airline-ret').value = trip.airlineRet || '';
+                        document.getElementById('input-flight-no-ret').value = trip.flightNoRet || '';
+                        document.getElementById('input-origin-ret').value = trip.originRet || '';
+                        document.getElementById('input-dest-ret').value = trip.destRet || '';
+                        document.getElementById('input-date-ret').value = trip.dateRet || '';
+                        document.getElementById('input-time-ret').value = trip.timeRet || '';
+                        document.getElementById('input-terminal-ret').value = trip.terminalRet || '';
+                        document.getElementById('input-gate-ret').value = trip.gateRet || '';
+                        document.getElementById('input-seat-ret').value = trip.seatRet || '';
+                    }
+                }
+            } else {
+                title.textContent = 'Nuevo viaje';
+                delBtn.classList.add('hidden');
+            }
+
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
+            requestAnimationFrame(() => {
+                inner.style.opacity = '1';
+                inner.style.transform = 'scale(1)';
+            });
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal(e) {
+            if (e && e.target.closest('#flight-modal-inner')) return;
+            const modal = document.getElementById('flight-modal');
+            const inner = document.getElementById('flight-modal-inner');
+            inner.style.opacity = '0';
+            inner.style.transform = 'scale(0.94)';
+            document.body.style.overflow = '';
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.style.display = '';
+                editingId = null;
+            }, 300);
+        }
+
+        // ========== VALIDATION + SAVE ==========
+        function validate(data) {
+            if (!data.origin) return 'Falta el aeropuerto de origen';
+            if (!data.dest) return 'Falta el aeropuerto de destino';
+            if (data.origin === data.dest) return 'Origen y destino no pueden ser iguales';
+            if (!airportByCode(data.origin)) return `Aeropuerto desconocido: ${data.origin}`;
+            if (!airportByCode(data.dest)) return `Aeropuerto desconocido: ${data.dest}`;
+            if (!data.date) return 'Falta la fecha de salida';
+            if (data.airline && !airlineByName(data.airline)) return 'Aerolínea no reconocida';
+            if (data.roundTrip) {
+                if (!data.dateRet) return 'Falta la fecha de regreso';
+                const out = new Date(data.date + 'T' + (data.time || '00:00'));
+                const ret = new Date(data.dateRet + 'T' + (data.timeRet || '00:00'));
+                if (ret < out) return 'El regreso no puede ser antes de la ida';
+            }
+            return null;
+        }
+
+        function saveTrip() {
+            const get = (id) => document.getElementById(id).value.trim();
+            const upper = (id) => get(id).toUpperCase();
+
+            const data = {
+                airline: get('input-airline'),
+                flightNo: upper('input-flight-no'),
+                origin: upper('input-origin'),
+                dest: upper('input-dest'),
+                date: get('input-date'),
+                time: get('input-time'),
+                terminal: upper('input-terminal'),
+                gate: upper('input-gate'),
+                seat: upper('input-seat'),
+                passenger: get('input-passenger'),
+                roundTrip: isRoundTrip,
+                airlineRet: get('input-airline-ret'),
+                flightNoRet: upper('input-flight-no-ret'),
+                originRet: upper('input-origin-ret') || upper('input-dest'),
+                destRet: upper('input-dest-ret') || upper('input-origin'),
+                dateRet: get('input-date-ret'),
+                timeRet: get('input-time-ret'),
+                terminalRet: upper('input-terminal-ret'),
+                gateRet: upper('input-gate-ret'),
+                seatRet: upper('input-seat-ret'),
+            };
+
+            const error = validate(data);
+            if (error) { toast(error, true); return; }
+
+            if (editingId) {
+                const idx = trips.findIndex(t => t.id === editingId);
+                if (idx >= 0) trips[idx] = { ...trips[idx], ...data };
+                toast('Viaje actualizado');
+            } else {
+                trips.push({ id: uid(), ...data });
+                toast('Viaje guardado');
+            }
+
+            saveAll();
+            render();
+            closeModal();
+        }
+
+        // ========== DELETE ==========
+        function deleteCurrentEditing() {
+            if (!editingId) return;
+            askDelete(editingId);
+        }
+        function askDelete(id) {
+            pendingDeleteId = id;
+            const trip = trips.find(t => t.id === id);
+            if (trip) {
+                const oCity = airportByCode(trip.origin)?.city || trip.origin;
+                const dCity = airportByCode(trip.dest)?.city || trip.dest;
+                document.getElementById('confirm-detail').textContent = `${oCity} → ${dCity} se eliminará permanentemente.`;
+            }
+            document.getElementById('confirm-overlay').classList.add('active');
+        }
+        function closeConfirm(e) {
+            if (e && e.target.closest('.bg-white')) return;
+            document.getElementById('confirm-overlay').classList.remove('active');
+            pendingDeleteId = null;
+        }
+        function confirmDelete() {
+            if (!pendingDeleteId) return;
+            const wasEditing = editingId === pendingDeleteId;
+            trips = trips.filter(t => t.id !== pendingDeleteId);
+            saveAll();
+            render();
+            if (wasEditing) closeModal();
+            document.getElementById('confirm-overlay').classList.remove('active');
+            pendingDeleteId = null;
+            toast('Viaje eliminado');
+        }
+
+        // ========== BOTTOM NAVBAR ==========
+        const viewTitles = {
+            home: { eyebrow: 'Itinerarios', title: 'Mis Viajes', showAdd: true },
+            participants: { eyebrow: 'Personas', title: 'Participantes', showAdd: false },
+            lodging: { eyebrow: 'Estancias', title: 'Hospedaje', showAdd: false },
+            expenses: { eyebrow: 'Finanzas', title: 'Gastos', showAdd: false }
+        };
+
+        function switchView(viewName) {
+            // Actualizar nav items
+            document.querySelectorAll('.nav-item').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.nav === viewName);
+            });
+            // Mostrar/ocultar secciones
+            document.querySelectorAll('section[data-view]').forEach(sec => {
+                sec.classList.toggle('hidden', sec.dataset.view !== viewName);
+            });
+            // Actualizar header
+            const config = viewTitles[viewName];
+            if (config) {
+                document.querySelector('nav .text-\\[10px\\]').textContent = config.eyebrow;
+                document.querySelector('nav h1').textContent = config.title;
+                document.getElementById('add-btn').style.display = config.showAdd ? 'flex' : 'none';
+            }
+        }
+
+        document.querySelectorAll('.nav-item').forEach(btn => {
+            btn.addEventListener('click', () => switchView(btn.dataset.nav));
+        });
+
+        // ========== INIT ==========
+        function tickCountdowns() {
+            const hasNear = trips.some(t => {
+                const ms = timeUntil(t.date, t.time);
+                return ms !== null && Math.abs(ms) < 86400000;
+            });
+            if (hasNear) render();
+        }
+
+        render();
+        setInterval(tickCountdowns, 60000);
+    </script>
+</body>
+</html>
