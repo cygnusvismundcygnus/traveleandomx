@@ -6,6 +6,11 @@
     <title>Traveleando MX</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Firebase SDK (compat para HTML estático sin bundler) -->
+    <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #191B1E; color: #1D1D1F; overflow-x: hidden; -webkit-tap-highlight-color: transparent; }
         .mono { font-family: 'JetBrains Mono', monospace; }
@@ -219,6 +224,30 @@
 </head>
 <body class="antialiased">
 
+    <!-- LOGIN SCREEN (visible mientras Firebase verifica auth) -->
+    <div id="login-screen" class="fixed inset-0 z-[200] flex flex-col items-center justify-center px-6"
+         style="background: linear-gradient(180deg, #191B1E 0%, #0E1525 100%);">
+        <div class="text-center mb-12">
+            <div class="w-20 h-20 mx-auto mb-6 rounded-3xl flex items-center justify-center" style="background: linear-gradient(135deg, #162B7E 0%, #276CF2 100%); box-shadow: 0 12px 40px rgba(39, 108, 242, 0.4);">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="white"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>
+            </div>
+            <h1 class="text-[28px] font-bold text-white mb-2 tracking-tight">Traveleando MX</h1>
+            <p class="text-[14px] text-gray-400 leading-relaxed max-w-xs mx-auto">Centraliza tus viajes, vuelos y gastos con tu grupo.</p>
+        </div>
+
+        <div id="login-loading" class="text-gray-500 text-[12px] hidden">
+            <span class="inline-block w-4 h-4 border-2 border-gray-500 border-t-white rounded-full animate-spin align-middle mr-2"></span>
+            Verificando sesión...
+        </div>
+
+        <button id="google-signin-btn" class="bg-white text-[#1D1D1F] px-6 py-3.5 rounded-full text-[14px] font-semibold flex items-center gap-3 active:scale-95 transition-transform shadow-xl">
+            <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/><path fill="#FF3D00" d="m6.306 14.691 6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/></svg>
+            Continuar con Google
+        </button>
+
+        <p class="text-[10px] text-gray-600 mt-8 text-center max-w-xs">Al continuar aceptas que guardemos tus viajes en la nube de forma segura.</p>
+    </div>
+
     <!-- TOAST -->
     <div id="toast" class="fixed top-0 left-0 right-0 z-[100] flex justify-center pointer-events-none px-4">
         <div class="bg-white text-[#1D1D1F] px-4 py-2.5 rounded-full shadow-lg flex items-center gap-2 max-w-sm">
@@ -302,12 +331,39 @@
 
     <!-- HEADER -->
     <nav class="sticky top-0 z-50 px-5 pt-6 pb-3 bg-[#191B1E]/85 backdrop-blur-md flex items-center justify-between max-w-md mx-auto">
-        <div>
-            <p class="text-[10px] font-semibold text-gray-500 uppercase tracking-[0.18em]">Itinerarios</p>
-            <h1 class="text-[22px] font-semibold text-white tracking-tight mt-0.5">Mis Viajes</h1>
+        <div class="flex items-center gap-3">
+            <button id="user-avatar-btn" aria-label="Sesión" class="w-9 h-9 rounded-full overflow-hidden border-2 border-white/10 active:scale-90 transition-transform flex-shrink-0">
+                <img id="user-avatar-img" src="" alt="" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                <div class="w-full h-full hidden items-center justify-center text-white text-[12px] font-bold" style="background: linear-gradient(135deg, #162B7E 0%, #276CF2 100%);">U</div>
+            </button>
+            <div>
+                <p class="text-[10px] font-semibold text-gray-500 uppercase tracking-[0.18em]">Itinerarios</p>
+                <h1 class="text-[22px] font-semibold text-white tracking-tight mt-0.5">Mis Viajes</h1>
+            </div>
         </div>
         <button id="add-btn" onclick="openModal()" aria-label="Añadir viaje" class="w-10 h-10 bg-white text-[#1D1D1F] rounded-full flex items-center justify-center text-xl font-light active:scale-90 transition-transform">+</button>
     </nav>
+
+    <!-- USER MENU (modal centrado al tap del avatar) -->
+    <div id="user-menu-overlay" class="overlay fixed inset-0 z-[75] flex items-start justify-center px-4 pt-20"
+         style="background: rgba(25, 27, 30, 0.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);"
+         onclick="closeUserMenu(event)">
+        <div id="user-menu" class="bg-[#F5F5F7] rounded-[24px] shadow-2xl max-w-xs w-full overflow-hidden" onclick="event.stopPropagation()" style="opacity: 0; transform: scale(0.94); transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
+            <div class="px-5 pt-5 pb-4 flex items-center gap-3 border-b border-gray-200/60">
+                <img id="menu-avatar-img" src="" alt="" class="w-12 h-12 rounded-full object-cover flex-shrink-0">
+                <div class="min-w-0 flex-1">
+                    <p id="menu-display-name" class="text-[14px] font-semibold text-[#1D1D1F] truncate">—</p>
+                    <p id="menu-email" class="text-[11px] text-gray-500 truncate">—</p>
+                </div>
+            </div>
+            <div class="p-2">
+                <button onclick="signOut()" class="w-full text-left px-3 py-3 rounded-xl text-[#FF3B30] text-[14px] font-medium active:bg-red-50 transition-colors flex items-center gap-3">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                    Cerrar sesión
+                </button>
+            </div>
+        </div>
+    </div>
 
     <main class="max-w-md mx-auto px-3 pb-32 pt-2">
 
@@ -542,6 +598,24 @@
     </div>
 
     <script>
+        // ========== FIREBASE INIT ==========
+        const firebaseConfig = {
+            apiKey: "AIzaSyC6ScpPHhNkdc2iAyA-kSu-3Kr_BnlWi0Y",
+            authDomain: "traveleandomx.firebaseapp.com",
+            projectId: "traveleandomx",
+            storageBucket: "traveleandomx.firebasestorage.app",
+            messagingSenderId: "820314780240",
+            appId: "1:820314780240:web:40d3ed707248e68920d755"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // Persistencia: el usuario queda logueado entre sesiones
+        auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+        let currentUser = null; // se llena cuando hay sesión activa
+
         // ========== DATA ==========
         const airports = [
             { code: 'ACA', city: 'Acapulco' },
@@ -626,14 +700,85 @@
         }
 
         // ========== STATE ==========
-        let trips = JSON.parse(localStorage.getItem('trips_v3') || '[]');
+        let trips = []; // se llena desde Firestore al hacer login
         let editingId = null;
         let pendingDeleteId = null;
         let isRoundTrip = false;
 
         // ========== UTILS ==========
         function uid() { return 't_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
-        function saveAll() { localStorage.setItem('trips_v3', JSON.stringify(trips)); }
+        // Guarda TODOS los viajes en Firestore. Estrategia simple: borra los del usuario
+        // y reescribe la lista actual. Para Fase 0 con pocos viajes funciona perfecto.
+        // En Fase 1 cambiaremos a writes individuales por trip.
+        async function saveAll() {
+            if (!currentUser) return;
+            try {
+                const userTripsRef = db.collection('users').doc(currentUser.uid).collection('trips');
+                // Batch write: más rápido y atómico
+                const batch = db.batch();
+
+                // 1. Leer IDs actuales en Firestore para borrar los que ya no existan localmente
+                const snap = await userTripsRef.get();
+                const remoteIds = new Set(snap.docs.map(d => d.id));
+                const localIds = new Set(trips.map(t => t.id));
+
+                // Borrar los que ya no están localmente
+                snap.docs.forEach(doc => {
+                    if (!localIds.has(doc.id)) batch.delete(doc.ref);
+                });
+
+                // Escribir todos los locales (merge: true para no sobreescribir campos no enviados)
+                trips.forEach(trip => {
+                    batch.set(userTripsRef.doc(trip.id), trip, { merge: true });
+                });
+
+                await batch.commit();
+            } catch (err) {
+                console.error('Error guardando en Firestore:', err);
+                toast('Error al guardar. Revisa tu conexión.', true);
+            }
+        }
+
+        // Carga viajes del usuario actual desde Firestore
+        async function loadTripsFromFirestore() {
+            if (!currentUser) return;
+            try {
+                const snap = await db.collection('users').doc(currentUser.uid).collection('trips').get();
+                trips = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                render();
+            } catch (err) {
+                console.error('Error cargando viajes:', err);
+                toast('Error al cargar. Revisa tu conexión.', true);
+            }
+        }
+
+        // Migración one-time: si hay viajes en localStorage y no en Firestore, los sube
+        async function migrateLocalStorageIfNeeded() {
+            if (!currentUser) return;
+            const local = localStorage.getItem('trips_v3');
+            if (!local) return;
+            try {
+                const localTrips = JSON.parse(local);
+                if (!Array.isArray(localTrips) || localTrips.length === 0) {
+                    localStorage.removeItem('trips_v3');
+                    return;
+                }
+                // Verificar si ya hay datos en Firestore (no sobrescribir)
+                const snap = await db.collection('users').doc(currentUser.uid).collection('trips').limit(1).get();
+                if (!snap.empty) {
+                    // Ya hay datos en la nube, no migramos
+                    localStorage.removeItem('trips_v3');
+                    return;
+                }
+                // Subir los viajes locales
+                trips = localTrips;
+                await saveAll();
+                localStorage.removeItem('trips_v3');
+                toast(`${localTrips.length} viaje(s) migrado(s) a la nube`);
+            } catch (err) {
+                console.error('Error migrando:', err);
+            }
+        }
         function airportByCode(code) { return airports.find(a => a.code === code); }
         function airlineByName(name) { return airlines.find(a => a.name === name); }
 
@@ -1258,7 +1403,7 @@
             return null;
         }
 
-        function saveTrip() {
+        async function saveTrip() {
             const get = (id) => document.getElementById(id).value.trim();
             const upper = (id) => get(id).toUpperCase();
 
@@ -1297,9 +1442,9 @@
                 toast('Viaje guardado');
             }
 
-            saveAll();
             render();
             closeModal();
+            await saveAll();
         }
 
         // ========== DELETE ==========
@@ -1322,16 +1467,16 @@
             document.getElementById('confirm-overlay').classList.remove('active');
             pendingDeleteId = null;
         }
-        function confirmDelete() {
+        async function confirmDelete() {
             if (!pendingDeleteId) return;
             const wasEditing = editingId === pendingDeleteId;
             trips = trips.filter(t => t.id !== pendingDeleteId);
-            saveAll();
             render();
             if (wasEditing) closeModal();
             document.getElementById('confirm-overlay').classList.remove('active');
             pendingDeleteId = null;
             toast('Viaje eliminado');
+            await saveAll();
         }
 
         // ========== BOTTOM NAVBAR ==========
@@ -1364,17 +1509,145 @@
             btn.addEventListener('click', () => switchView(btn.dataset.nav));
         });
 
-        // ========== INIT ==========
-        function tickCountdowns() {
+        // ========== AUTH FLOW ==========
+        const loginScreen = document.getElementById('login-screen');
+        const loginBtn = document.getElementById('google-signin-btn');
+        const loginLoading = document.getElementById('login-loading');
+
+        async function signInWithGoogle() {
+            loginBtn.disabled = true;
+            loginBtn.style.opacity = '0.6';
+            loginLoading.classList.remove('hidden');
+            try {
+                const provider = new firebase.auth.GoogleAuthProvider();
+                provider.setCustomParameters({ prompt: 'select_account' });
+                await auth.signInWithPopup(provider);
+                // El listener onAuthStateChanged se encarga del resto
+            } catch (err) {
+                console.error('Error login:', err);
+                if (err.code === 'auth/popup-blocked') {
+                    toast('Permite popups para iniciar sesión', true);
+                } else if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+                    // Usuario canceló, sin error
+                } else if (err.code === 'auth/unauthorized-domain') {
+                    toast('Dominio no autorizado en Firebase', true);
+                } else {
+                    toast('Error al iniciar sesión', true);
+                }
+                loginBtn.disabled = false;
+                loginBtn.style.opacity = '1';
+                loginLoading.classList.add('hidden');
+            }
+        }
+
+        async function signOut() {
+            try {
+                await auth.signOut();
+                trips = [];
+                closeUserMenu();
+                // El listener mostrará la pantalla de login
+            } catch (err) {
+                console.error('Error logout:', err);
+                toast('Error al cerrar sesión', true);
+            }
+        }
+
+        function showLoginScreen() {
+            loginScreen.style.display = 'flex';
+            loginBtn.disabled = false;
+            loginBtn.style.opacity = '1';
+            loginLoading.classList.add('hidden');
+        }
+
+        function hideLoginScreen() {
+            loginScreen.style.display = 'none';
+        }
+
+        function updateUserUI(user) {
+            const photoURL = user.photoURL || '';
+            const displayName = user.displayName || user.email?.split('@')[0] || 'Usuario';
+            const email = user.email || '';
+
+            const avatarImg = document.getElementById('user-avatar-img');
+            avatarImg.src = photoURL;
+            avatarImg.alt = displayName;
+            if (!photoURL) {
+                avatarImg.style.display = 'none';
+                avatarImg.nextElementSibling.style.display = 'flex';
+                avatarImg.nextElementSibling.textContent = displayName.charAt(0).toUpperCase();
+            } else {
+                avatarImg.style.display = 'block';
+                avatarImg.nextElementSibling.style.display = 'none';
+            }
+
+            document.getElementById('menu-avatar-img').src = photoURL;
+            document.getElementById('menu-display-name').textContent = displayName;
+            document.getElementById('menu-email').textContent = email;
+        }
+
+        // ========== USER MENU ==========
+        function openUserMenu() {
+            const overlay = document.getElementById('user-menu-overlay');
+            const menu = document.getElementById('user-menu');
+            overlay.classList.add('active');
+            requestAnimationFrame(() => {
+                menu.style.opacity = '1';
+                menu.style.transform = 'scale(1)';
+            });
+        }
+
+        function closeUserMenu(e) {
+            if (e && e.target.closest('#user-menu')) return;
+            const overlay = document.getElementById('user-menu-overlay');
+            const menu = document.getElementById('user-menu');
+            menu.style.opacity = '0';
+            menu.style.transform = 'scale(0.94)';
+            overlay.classList.remove('active');
+        }
+
+        document.getElementById('user-avatar-btn').addEventListener('click', openUserMenu);
+        loginBtn.addEventListener('click', signInWithGoogle);
+
+        // Listener: se dispara al cargar la página, al login y al logout
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                currentUser = user;
+
+                // Guardar/actualizar info del usuario en Firestore
+                try {
+                    await db.collection('users').doc(user.uid).set({
+                        email: user.email,
+                        displayName: user.displayName,
+                        photoURL: user.photoURL,
+                        lastLoginAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                } catch (err) {
+                    console.error('Error guardando user:', err);
+                }
+
+                updateUserUI(user);
+                hideLoginScreen();
+
+                // Migrar localStorage si aplica, luego cargar de Firestore
+                await migrateLocalStorageIfNeeded();
+                await loadTripsFromFirestore();
+            } else {
+                currentUser = null;
+                trips = [];
+                render();
+                showLoginScreen();
+            }
+        });
+
+        // Tick de countdowns
+        function tickCountdownsLoop() {
             const hasNear = trips.some(t => {
                 const ms = timeUntil(t.date, t.time);
                 return ms !== null && Math.abs(ms) < 86400000;
             });
             if (hasNear) render();
         }
-
-        render();
-        setInterval(tickCountdowns, 60000);
+        setInterval(tickCountdownsLoop, 60000);
     </script>
 </body>
 </html>
