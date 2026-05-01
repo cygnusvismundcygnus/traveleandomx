@@ -920,7 +920,6 @@
         }
 
         // ========== STATE ==========
-        let trips = []; // se llena desde Firestore al hacer login
         let editingId = null;
         let pendingDeleteId = null;
         let isRoundTrip = false;
@@ -935,7 +934,7 @@
         // trips: vuelos del viaje actual (lista del tab "Vuelos")
         let tripGroups = [];
         let currentTripGroup = null; // { id, name, destination, ... } cuando estás dentro
-        let trips = []; // ahora es la lista de vuelos del viaje actual
+        let trips = []; // lista de vuelos del viaje actual
         let currentView = 'trips'; // qué vista está activa
         let pendingInvite = null; // cuando llega ?invite=... en URL
 
