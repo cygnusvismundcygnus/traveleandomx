@@ -1802,6 +1802,54 @@
             document.getElementById('seg-oneway').classList.toggle('active', !val);
             document.getElementById('seg-round').classList.toggle('active', val);
             document.getElementById('form-section-return').classList.toggle('hidden', !val);
+
+            // Auto-llenar campos del regreso si está activando "ida y vuelta"
+            if (val) autofillReturnFlight();
+        }
+
+        function autofillReturnFlight() {
+            // Solo auto-llenar campos vacíos para no sobreescribir lo que el usuario ya escribió
+            const originIda = document.getElementById('input-origin').value.trim().toUpperCase();
+            const destIda = document.getElementById('input-dest').value.trim().toUpperCase();
+            const dateIda = document.getElementById('input-date').value;
+            const timeIda = document.getElementById('input-time').value;
+            const airlineIda = document.getElementById('input-airline').value.trim();
+
+            // Origen del regreso = Destino de la ida (invertido)
+            const originRetField = document.getElementById('input-origin-ret');
+            if (!originRetField.value && destIda) {
+                originRetField.value = destIda;
+            }
+
+            // Destino del regreso = Origen de la ida
+            const destRetField = document.getElementById('input-dest-ret');
+            if (!destRetField.value && originIda) {
+                destRetField.value = originIda;
+            }
+
+            // Fecha del regreso: 3 días después de la ida
+            const dateRetField = document.getElementById('input-date-ret');
+            if (!dateRetField.value && dateIda) {
+                const [y, m, d] = dateIda.split('-').map(Number);
+                const idaDate = new Date(y, m - 1, d);
+                idaDate.setDate(idaDate.getDate() + 3);
+                const yy = idaDate.getFullYear();
+                const mm = String(idaDate.getMonth() + 1).padStart(2, '0');
+                const dd = String(idaDate.getDate()).padStart(2, '0');
+                dateRetField.value = `${yy}-${mm}-${dd}`;
+            }
+
+            // Hora: copiar la de la ida si está vacía
+            const timeRetField = document.getElementById('input-time-ret');
+            if (!timeRetField.value && timeIda) {
+                timeRetField.value = timeIda;
+            }
+
+            // Aerolínea: pre-llenar con la misma de la ida (común que sea la misma)
+            const airlineRetField = document.getElementById('input-airline-ret');
+            if (!airlineRetField.value && airlineIda) {
+                airlineRetField.value = airlineIda;
+            }
         }
 
         function openModal(tripId = null) {
@@ -1976,7 +2024,18 @@
         async function confirmDelete() {
             if (!pendingDeleteId) return;
 
-            // Distinguir si estamos borrando un vuelo o un viaje grupal
+            // Caso: remover miembro
+            if (pendingDeleteType === 'member') {
+                const memberIdToRemove = pendingDeleteId;
+                document.getElementById('confirm-overlay').classList.remove('active');
+                pendingDeleteId = null;
+                pendingDeleteType = null;
+                pendingRemoveMemberId = null;
+                await removeMemberFromTrip(memberIdToRemove);
+                return;
+            }
+
+            // Caso: borrar viaje grupal
             if (pendingDeleteType === 'tripGroup') {
                 const tripIdToDelete = pendingDeleteId;
                 document.getElementById('confirm-overlay').classList.remove('active');
@@ -1993,7 +2052,7 @@
                 return;
             }
 
-            // Borrado de vuelo
+            // Caso default: borrar vuelo
             const wasEditing = editingId === pendingDeleteId;
             const flightId = pendingDeleteId;
             trips = trips.filter(t => t.id !== flightId);
@@ -2006,7 +2065,7 @@
             await deleteFlightFromFirestore(flightId);
         }
 
-        let pendingDeleteType = null; // 'flight' | 'tripGroup'
+        let pendingDeleteType = null; // 'flight' | 'tripGroup' | 'member'
 
         // ========================================================================
         // NAVEGACIÓN ENTRE VISTAS Y VIAJES
@@ -2246,6 +2305,15 @@
                 const initial = name.charAt(0).toUpperCase();
                 const role = m.role || 'member';
                 const roleLabel = role === 'super_admin' ? 'Admin' : 'Miembro';
+
+                // Solo el admin puede ver el botón de eliminar, y nunca puede eliminarse a sí mismo
+                const canRemove = isAdmin && !isYou;
+                const removeBtn = canRemove
+                    ? `<button data-remove-member="${uid}" aria-label="Eliminar miembro" class="w-9 h-9 rounded-xl bg-red-50 text-[#FF3B30] flex items-center justify-center active:scale-90 transition-transform flex-shrink-0">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                        </button>`
+                    : '';
+
                 return `
                     <div class="participant-card">
                         <div class="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-gray-200" style="background: linear-gradient(135deg, #162B7E 0%, #276CF2 100%);">
@@ -2256,9 +2324,59 @@
                             <p class="text-[11px] text-gray-500 truncate">${escapeHtml(m.email || '')}</p>
                         </div>
                         <span class="role-badge role-${role}">${roleLabel}</span>
+                        ${removeBtn}
                     </div>
                 `;
             }).join('');
+
+            // Bind eventos de eliminar
+            container.querySelectorAll('[data-remove-member]').forEach(btn => {
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    const uid = btn.dataset.removeMember;
+                    askRemoveMember(uid);
+                };
+            });
+        }
+
+        // ========================================================================
+        // REMOVER MIEMBRO DEL VIAJE
+        // ========================================================================
+        let pendingRemoveMemberId = null;
+
+        function askRemoveMember(memberId) {
+            if (!currentTripGroup) return;
+            const m = currentTripGroup.members?.[memberId];
+            if (!m) return;
+            pendingRemoveMemberId = memberId;
+            pendingDeleteId = memberId;
+            pendingDeleteType = 'member';
+            document.getElementById('confirm-detail').textContent = `${m.displayName || 'Este miembro'} será removido del viaje y dejará de ver su contenido.`;
+            document.getElementById('confirm-overlay').classList.add('active');
+        }
+
+        async function removeMemberFromTrip(memberId) {
+            if (!currentTripGroup || !currentUser) return;
+            const myRole = currentTripGroup.members?.[currentUser.uid]?.role;
+            if (myRole !== 'super_admin') {
+                toast('Solo el admin puede remover miembros', true);
+                return;
+            }
+            if (memberId === currentUser.uid) {
+                toast('No puedes removerte a ti mismo', true);
+                return;
+            }
+            try {
+                await db.collection('trips').doc(currentTripGroup.id).update({
+                    [`members.${memberId}`]: firebase.firestore.FieldValue.delete(),
+                    memberIds: firebase.firestore.FieldValue.arrayRemove(memberId)
+                });
+                toast('Miembro removido');
+                // El listener actualizará la UI automáticamente
+            } catch (err) {
+                console.error('Error removiendo miembro:', err);
+                toast('Error al remover miembro', true);
+            }
         }
 
         // ========================================================================
