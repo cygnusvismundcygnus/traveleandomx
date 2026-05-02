@@ -947,33 +947,87 @@
         // PERSISTENCIA EN FIRESTORE
         // ========================================================================
 
-        // Carga los viajes grupales donde el usuario es miembro
-        async function loadTripGroups() {
+        // Listeners activos (para limpiar al hacer logout)
+        let unsubscribeTripGroups = null;
+        let unsubscribeFlights = null;
+        let unsubscribeCurrentTrip = null;
+
+        // Listener en tiempo real de los viajes grupales del usuario
+        function loadTripGroups() {
             if (!currentUser) return;
-            try {
-                const snap = await db.collection('trips')
+            // Cancelar listener anterior si existe
+            if (unsubscribeTripGroups) unsubscribeTripGroups();
+
+            return new Promise((resolve) => {
+                let firstLoad = true;
+                unsubscribeTripGroups = db.collection('trips')
                     .where('memberIds', 'array-contains', currentUser.uid)
-                    .get();
-                tripGroups = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                renderTripGroups();
-            } catch (err) {
-                console.error('Error cargando viajes grupales:', err);
-                toast('Error al cargar viajes', true);
-            }
+                    .onSnapshot(
+                        (snap) => {
+                            tripGroups = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                            // Si estás dentro de un viaje, refrescar el currentTripGroup también
+                            if (currentTripGroup) {
+                                const updated = tripGroups.find(t => t.id === currentTripGroup.id);
+                                if (updated) {
+                                    currentTripGroup = updated;
+                                    // Re-renderizar la vista actual si es de trip context
+                                    if (['flights', 'participants', 'itinerary', 'expenses'].includes(currentView)) {
+                                        if (currentView === 'participants') renderParticipants();
+                                        updateHeader();
+                                    }
+                                } else {
+                                    // El viaje fue eliminado o ya no soy miembro
+                                    exitTrip();
+                                    toast('Ya no perteneces a este viaje', true);
+                                }
+                            }
+
+                            if (currentView === 'trips') renderTripGroups();
+                            if (firstLoad) {
+                                firstLoad = false;
+                                resolve();
+                            }
+                        },
+                        (err) => {
+                            console.error('Error listener viajes grupales:', err);
+                            toast('Error al cargar viajes', true);
+                            if (firstLoad) {
+                                firstLoad = false;
+                                resolve();
+                            }
+                        }
+                    );
+            });
         }
 
-        // Carga los vuelos del viaje grupal actualmente seleccionado
-        async function loadFlightsOfCurrentTrip() {
+        // Listener en tiempo real de los vuelos del viaje actual
+        function loadFlightsOfCurrentTrip() {
             if (!currentUser || !currentTripGroup) return;
-            try {
-                const snap = await db.collection('trips').doc(currentTripGroup.id)
-                    .collection('flights').get();
-                trips = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                render();
-            } catch (err) {
-                console.error('Error cargando vuelos:', err);
-                toast('Error al cargar vuelos', true);
-            }
+            if (unsubscribeFlights) unsubscribeFlights();
+
+            return new Promise((resolve) => {
+                let firstLoad = true;
+                unsubscribeFlights = db.collection('trips').doc(currentTripGroup.id)
+                    .collection('flights')
+                    .onSnapshot(
+                        (snap) => {
+                            trips = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                            if (currentView === 'flights') render();
+                            if (firstLoad) {
+                                firstLoad = false;
+                                resolve();
+                            }
+                        },
+                        (err) => {
+                            console.error('Error listener vuelos:', err);
+                            if (firstLoad) {
+                                firstLoad = false;
+                                resolve();
+                            }
+                        }
+                    );
+            });
         }
 
         // Guarda un vuelo individual del usuario actual en el viaje actual
@@ -1166,15 +1220,20 @@
         async function migrateFromPhase0() {
             if (!currentUser) return;
             try {
+                // Optimización: limit(1) primero para detectar rápido si hay datos viejos
+                // Para usuarios nuevos (la mayoría), esta query devuelve vacío en milisegundos
+                const checkSnap = await db.collection('users').doc(currentUser.uid)
+                    .collection('trips').limit(1).get();
+                if (checkSnap.empty) return; // Usuario nuevo, no hay nada que migrar
+
+                // Si hay al menos un viaje viejo, ahora sí leemos todos
                 const oldSnap = await db.collection('users').doc(currentUser.uid)
                     .collection('trips').get();
-                if (oldSnap.empty) return;
 
                 toast(`Migrando ${oldSnap.size} viaje(s) de Fase 0...`);
 
                 for (const doc of oldSnap.docs) {
                     const oldData = doc.data();
-                    // Crear viaje grupal con los datos del vuelo viejo
                     const tripGroupName = oldData.origin && oldData.dest
                         ? `${oldData.origin} → ${oldData.dest}`
                         : 'Viaje migrado';
@@ -1186,12 +1245,10 @@
                         coverEmoji: '✈️'
                     });
                     if (tripGroup) {
-                        // Mover el vuelo a la subcolección flights del nuevo trip
                         await db.collection('trips').doc(tripGroup.id)
                             .collection('flights').doc(doc.id)
                             .set({ ...oldData, userId: currentUser.uid });
                     }
-                    // Borrar el viejo
                     await doc.ref.delete();
                 }
             } catch (err) {
@@ -2057,6 +2114,10 @@
 
         // Salir del viaje (vuelve al home)
         function exitTrip() {
+            if (unsubscribeFlights) {
+                unsubscribeFlights();
+                unsubscribeFlights = null;
+            }
             currentTripGroup = null;
             trips = [];
             switchView('trips');
@@ -2509,11 +2570,15 @@
 
         async function signOut() {
             try {
+                // Cancelar todos los listeners antes de cerrar sesión
+                if (unsubscribeTripGroups) { unsubscribeTripGroups(); unsubscribeTripGroups = null; }
+                if (unsubscribeFlights) { unsubscribeFlights(); unsubscribeFlights = null; }
+                if (unsubscribeCurrentTrip) { unsubscribeCurrentTrip(); unsubscribeCurrentTrip = null; }
+
                 await auth.signOut();
                 trips = [];
                 tripGroups = [];
                 currentTripGroup = null;
-                // El listener mostrará la pantalla de login
             } catch (err) {
                 console.error('Error logout:', err);
                 toast('Error al cerrar sesión', true);
@@ -2534,9 +2599,9 @@
         function updateUserUI(user) {
             const photoURL = user.photoURL || '';
             const displayName = user.displayName || user.email?.split('@')[0] || 'Usuario';
-            const email = user.email || '';
 
             const avatarImg = document.getElementById('user-avatar-img');
+            if (!avatarImg) return;
             avatarImg.src = photoURL;
             avatarImg.alt = displayName;
             if (!photoURL) {
@@ -2547,10 +2612,7 @@
                 avatarImg.style.display = 'block';
                 avatarImg.nextElementSibling.style.display = 'none';
             }
-
-            document.getElementById('menu-avatar-img').src = photoURL;
-            document.getElementById('menu-display-name').textContent = displayName;
-            document.getElementById('menu-email').textContent = email;
+            // El perfil completo se renderiza al entrar a la pestaña "Perfil" (ver renderProfile)
         }
 
         // El menú de usuario ahora vive en el tab "Profile" (ver renderProfile)
