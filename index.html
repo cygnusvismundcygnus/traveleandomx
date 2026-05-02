@@ -1117,17 +1117,28 @@
         }
 
         async function deleteTripGroup(tripId) {
-            if (!currentUser) return;
+            if (!currentUser) throw new Error('No hay usuario');
+            console.log('[delete] Iniciando borrado de viaje:', tripId);
             try {
-                // Borrar subcolección de flights primero
+                // 1. Borrar subcolección de flights
                 const flightsSnap = await db.collection('trips').doc(tripId).collection('flights').get();
-                const batch = db.batch();
-                flightsSnap.docs.forEach(d => batch.delete(d.ref));
-                batch.delete(db.collection('trips').doc(tripId));
-                await batch.commit();
+                console.log(`[delete] Borrando ${flightsSnap.size} vuelo(s) primero`);
+
+                if (flightsSnap.size > 0) {
+                    const batch = db.batch();
+                    flightsSnap.docs.forEach(d => batch.delete(d.ref));
+                    await batch.commit();
+                    console.log('[delete] Vuelos borrados');
+                }
+
+                // 2. Borrar el doc principal del viaje
+                await db.collection('trips').doc(tripId).delete();
+                console.log('[delete] Viaje borrado de Firestore');
+
+                return true;
             } catch (err) {
-                console.error('Error eliminando viaje:', err);
-                toast('Error al eliminar', true);
+                console.error('[delete] Error eliminando viaje:', err);
+                throw err; // Propagar para que confirmDelete sepa que falló
             }
         }
 
@@ -2041,14 +2052,19 @@
                 document.getElementById('confirm-overlay').classList.remove('active');
                 pendingDeleteId = null;
                 pendingDeleteType = null;
-                await deleteTripGroup(tripIdToDelete);
-                tripGroups = tripGroups.filter(t => t.id !== tripIdToDelete);
-                if (currentTripGroup?.id === tripIdToDelete) {
-                    exitTrip();
+                try {
+                    await deleteTripGroup(tripIdToDelete);
+                    // Solo si Firestore confirmó el borrado, actualizamos UI
+                    tripGroups = tripGroups.filter(t => t.id !== tripIdToDelete);
+                    if (currentTripGroup?.id === tripIdToDelete) {
+                        exitTrip();
+                    }
+                    renderTripGroups();
+                    closeCreateTripModal();
+                    toast('Viaje eliminado');
+                } catch (err) {
+                    toast('No se pudo eliminar. Revisa permisos.', true);
                 }
-                renderTripGroups();
-                closeCreateTripModal();
-                toast('Viaje eliminado');
                 return;
             }
 
