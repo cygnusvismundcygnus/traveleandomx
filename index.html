@@ -2054,15 +2054,29 @@
                 pendingDeleteType = null;
                 try {
                     await deleteTripGroup(tripIdToDelete);
-                    // Solo si Firestore confirmó el borrado, actualizamos UI
-                    tripGroups = tripGroups.filter(t => t.id !== tripIdToDelete);
-                    if (currentTripGroup?.id === tripIdToDelete) {
+                    console.log('[delete] Confirmado borrado, limpiando UI');
+
+                    // 1. Cerrar el modal de editar viaje (si estaba abierto)
+                    closeCreateTripModal();
+
+                    // 2. Si estábamos dentro de ese viaje, salir explícitamente al home
+                    const wasInTrip = currentTripGroup?.id === tripIdToDelete;
+                    if (wasInTrip) {
                         exitTrip();
                     }
+
+                    // 3. Actualizar lista local (defensa contra cache de Firestore)
+                    tripGroups = tripGroups.filter(t => t.id !== tripIdToDelete);
                     renderTripGroups();
-                    closeCreateTripModal();
+
+                    // 4. Forzar vista de home si por alguna razón seguimos en otra
+                    if (currentView !== 'trips') {
+                        switchView('trips');
+                    }
+
                     toast('Viaje eliminado');
                 } catch (err) {
+                    console.error('[delete] Error:', err);
                     toast('No se pudo eliminar. Revisa permisos.', true);
                 }
                 return;
