@@ -34,6 +34,7 @@
             display: flex;
             align-items: center;
             gap: 14px;
+            position: relative;
         }
         .trip-card:active { transform: scale(0.98); }
         .trip-card-emoji {
@@ -47,6 +48,60 @@
             flex-shrink: 0;
             background: linear-gradient(135deg, #162B7E 0%, #276CF2 100%);
         }
+        .trip-card-menu-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            background: rgba(0,0,0,0.04);
+            color: #6B7280;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: background 0.15s ease, transform 0.15s ease;
+        }
+        .trip-card-menu-btn:active {
+            background: rgba(0,0,0,0.08);
+            transform: scale(0.92);
+        }
+        /* Menú flotante de acciones de la card */
+        .card-action-menu {
+            position: absolute;
+            top: calc(100% + 6px);
+            right: 12px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+            padding: 6px;
+            z-index: 60;
+            min-width: 180px;
+            opacity: 0;
+            transform: scale(0.9) translateY(-4px);
+            transform-origin: top right;
+            transition: opacity 0.15s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            pointer-events: none;
+        }
+        .card-action-menu.active {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+            pointer-events: auto;
+        }
+        .card-action-menu button {
+            width: 100%;
+            text-align: left;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #1D1D1F;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: background 0.12s ease;
+        }
+        .card-action-menu button:active { background: #F2F2F7; }
+        .card-action-menu button.danger { color: #FF3B30; }
+        .card-action-menu button.danger:active { background: #FFE5E5; }
 
         /* ============ EMOJI GALLERY ============ */
         .emoji-btn {
@@ -327,7 +382,7 @@
     <!-- OVERLAYS -->
     <div id="confirm-overlay" class="overlay fixed inset-0 bg-black/50 backdrop-blur-sm z-[80] flex items-center justify-center px-6" onclick="closeConfirm(event)">
         <div class="bg-white rounded-3xl p-6 max-w-xs w-full shadow-2xl" onclick="event.stopPropagation()">
-            <h3 class="text-[17px] font-semibold text-center mb-1 text-[#1D1D1F]">¿Eliminar viaje?</h3>
+            <h3 id="confirm-title" class="text-[17px] font-semibold text-center mb-1 text-[#1D1D1F]">¿Eliminar?</h3>
             <p id="confirm-detail" class="text-[13px] text-gray-500 text-center mb-5">Esta acción no se puede deshacer.</p>
             <div class="flex gap-2">
                 <button onclick="closeConfirm()" class="flex-1 bg-[#F2F2F7] text-[#1D1D1F] py-3 rounded-xl text-[14px] font-medium">Cancelar</button>
@@ -806,7 +861,7 @@
             </div>
 
             <button id="delete-trip-btn" onclick="deleteCurrentEditing()" class="w-full bg-[#FF3B30] text-white py-3.5 rounded-[20px] text-[14px] font-semibold hidden active:scale-[0.98] transition-transform">
-                Eliminar viaje
+                Eliminar vuelo
             </button>
 
             <p class="text-[11px] text-gray-400 text-center px-4 pt-2 leading-relaxed">
@@ -2024,6 +2079,7 @@
                 const dCity = airportByCode(trip.dest)?.city || trip.dest;
                 document.getElementById('confirm-detail').textContent = `${oCity} → ${dCity} se eliminará permanentemente.`;
             }
+            document.getElementById('confirm-title').textContent = '¿Eliminar vuelo?';
             document.getElementById('confirm-overlay').classList.add('active');
         }
         function closeConfirm(e) {
@@ -2239,19 +2295,124 @@
             });
 
             container.innerHTML = sorted.map(t => renderTripCard(t)).join('');
+
+            // Click en la card (entrar al viaje) — pero ignorar si vino del botón menú o el menú
             container.querySelectorAll('[data-trip-group-id]').forEach(el => {
-                el.addEventListener('click', () => {
+                el.addEventListener('click', (e) => {
+                    if (e.target.closest('[data-card-menu]') || e.target.closest('[data-card-menu-floating]')) {
+                        return; // No entrar al viaje si tocaron el menú
+                    }
                     const trip = tripGroups.find(t => t.id === el.dataset.tripGroupId);
                     if (trip) enterTrip(trip);
                 });
             });
+
+            // Click en el botón "⋯" para abrir el menú flotante
+            container.querySelectorAll('[data-card-menu]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggleCardMenu(btn.dataset.cardMenu);
+                });
+            });
+
+            // Click en cada acción del menú
+            container.querySelectorAll('[data-action]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const action = btn.dataset.action;
+                    const tripId = btn.dataset.tripId;
+                    closeAllCardMenus();
+                    handleCardAction(action, tripId);
+                });
+            });
+        }
+
+        // ========================================================================
+        // MENÚ FLOTANTE DE CARD (Editar / Compartir / Eliminar)
+        // ========================================================================
+        function toggleCardMenu(tripId) {
+            const menu = document.querySelector(`[data-card-menu-floating="${tripId}"]`);
+            if (!menu) return;
+            const wasOpen = menu.classList.contains('active');
+            closeAllCardMenus();
+            if (!wasOpen) menu.classList.add('active');
+        }
+
+        function closeAllCardMenus() {
+            document.querySelectorAll('.card-action-menu.active').forEach(m => m.classList.remove('active'));
+        }
+
+        // Cerrar al click afuera
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('[data-card-menu]') && !e.target.closest('[data-card-menu-floating]')) {
+                closeAllCardMenus();
+            }
+        });
+
+        async function handleCardAction(action, tripId) {
+            const trip = tripGroups.find(t => t.id === tripId);
+            if (!trip) return;
+
+            if (action === 'edit') {
+                openCreateTripModal(tripId);
+            } else if (action === 'invite') {
+                // Atajo: poner el viaje como currentTripGroup temporalmente para reusar openInviteModal
+                const previousTrip = currentTripGroup;
+                currentTripGroup = trip;
+                await openInviteModal();
+                // No restauro currentTripGroup porque al cerrar el modal de invitar
+                // el usuario probablemente quiera quedarse en el home; openInviteModal
+                // funciona standalone sin requerir estar dentro del viaje.
+                // Si no estaba dentro de un viaje antes, lo limpio cuando cierre el modal.
+                if (!previousTrip) {
+                    // Esperar a que se cierre el modal y limpiar
+                    const checkInterval = setInterval(() => {
+                        const overlay = document.getElementById('invite-modal');
+                        if (!overlay.classList.contains('active')) {
+                            currentTripGroup = null;
+                            clearInterval(checkInterval);
+                        }
+                    }, 500);
+                }
+            } else if (action === 'delete') {
+                pendingDeleteId = tripId;
+                pendingDeleteType = 'tripGroup';
+                document.getElementById('confirm-detail').textContent = `${trip.name || 'Este viaje'} y todos sus vuelos se eliminarán permanentemente.`;
+                document.getElementById('confirm-title').textContent = '¿Eliminar viaje?';
+                document.getElementById('confirm-overlay').classList.add('active');
+            }
         }
 
         function renderTripCard(trip) {
             const role = trip.members?.[currentUser?.uid]?.role || 'member';
+            const isAdmin = role === 'super_admin';
             const memberCount = trip.memberIds?.length || 0;
             const dateRange = formatTripDateRange(trip.startDate, trip.endDate);
             const countdown = tripCountdown(trip.startDate, trip.endDate);
+
+            // Solo el admin ve el botón de menú "⋯"
+            const menuButton = isAdmin
+                ? `<button class="trip-card-menu-btn" data-card-menu="${trip.id}" aria-label="Acciones del viaje">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                    </button>`
+                : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C7C7CC" stroke-width="3" stroke-linecap="round" class="flex-shrink-0"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+
+            const menuFloating = isAdmin
+                ? `<div class="card-action-menu" data-card-menu-floating="${trip.id}">
+                        <button data-action="edit" data-trip-id="${trip.id}">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                            Editar viaje
+                        </button>
+                        <button data-action="invite" data-trip-id="${trip.id}">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                            Compartir invitación
+                        </button>
+                        <button data-action="delete" data-trip-id="${trip.id}" class="danger">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            Eliminar viaje
+                        </button>
+                    </div>`
+                : '';
 
             return `
                 <div class="trip-card" data-trip-group-id="${trip.id}">
@@ -2259,12 +2420,13 @@
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 mb-0.5">
                             <h3 class="text-[15px] font-semibold text-[#1D1D1F] truncate">${escapeHtml(trip.name || 'Viaje')}</h3>
-                            ${role === 'super_admin' ? '<span class="role-badge role-super_admin">Admin</span>' : ''}
+                            ${isAdmin ? '<span class="role-badge role-super_admin">Admin</span>' : ''}
                         </div>
                         <p class="text-[11px] text-gray-500 truncate">${escapeHtml(trip.destination || '—')} · ${dateRange}</p>
                         <p class="text-[11px] text-gray-400 mt-1">${countdown} · ${memberCount} ${memberCount === 1 ? 'persona' : 'personas'}</p>
                     </div>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C7C7CC" stroke-width="3" stroke-linecap="round" class="flex-shrink-0"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    ${menuButton}
+                    ${menuFloating}
                 </div>
             `;
         }
@@ -2382,6 +2544,7 @@
             pendingDeleteId = memberId;
             pendingDeleteType = 'member';
             document.getElementById('confirm-detail').textContent = `${m.displayName || 'Este miembro'} será removido del viaje y dejará de ver su contenido.`;
+            document.getElementById('confirm-title').textContent = '¿Remover miembro?';
             document.getElementById('confirm-overlay').classList.add('active');
         }
 
@@ -2520,6 +2683,7 @@
             pendingDeleteId = editingTripGroupId;
             pendingDeleteType = 'tripGroup';
             document.getElementById('confirm-detail').textContent = `${trip?.name || 'Este viaje'} y todos sus vuelos se eliminarán permanentemente.`;
+            document.getElementById('confirm-title').textContent = '¿Eliminar viaje?';
             document.getElementById('confirm-overlay').classList.add('active');
         }
 
