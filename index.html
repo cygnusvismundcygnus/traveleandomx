@@ -2566,8 +2566,14 @@
         auth.onAuthStateChanged(async (user) => {
             if (user) {
                 currentUser = user;
+                console.log('[auth] Usuario:', user.email);
 
-                // Guardar/actualizar info del usuario en Firestore
+                // Mostrar UI inmediatamente — aunque falle algo, el usuario ve la app
+                try { updateUserUI(user); } catch (e) { console.error('updateUserUI:', e); }
+                hideLoginScreen();
+                try { switchView('trips'); } catch (e) { console.error('switchView:', e); }
+
+                // 1. Guardar/actualizar info del usuario (no bloqueante)
                 try {
                     await db.collection('users').doc(user.uid).set({
                         email: user.email,
@@ -2575,32 +2581,41 @@
                         photoURL: user.photoURL,
                         lastLoginAt: firebase.firestore.FieldValue.serverTimestamp()
                     }, { merge: true });
+                    console.log('[auth] User doc actualizado');
                 } catch (err) {
-                    console.error('Error guardando user:', err);
+                    console.error('Error guardando user doc:', err);
                 }
 
-                updateUserUI(user);
-                hideLoginScreen();
+                // 2. Migrar Fase 0 (si falla, ignorar y seguir)
+                try {
+                    await migrateFromPhase0();
+                } catch (err) {
+                    console.error('Error en migración Fase 0:', err);
+                }
 
-                // Migrar Fase 0 si hay datos viejos
-                await migrateFromPhase0();
+                // 3. Cargar viajes grupales
+                try {
+                    await loadTripGroups();
+                    console.log('[auth] Viajes cargados:', tripGroups.length);
+                } catch (err) {
+                    console.error('Error cargando viajes grupales:', err);
+                    toast('No se pudieron cargar los viajes', true);
+                }
 
-                // Cargar viajes grupales
-                await loadTripGroups();
-
-                // Si hay invitación pendiente, mostrarla
+                // 4. Si hay invitación pendiente, mostrarla
                 if (pendingInvite) {
-                    await showAcceptInviteIfPending();
-                } else {
-                    // Vista por default: trips
-                    switchView('trips');
+                    try {
+                        await showAcceptInviteIfPending();
+                    } catch (err) {
+                        console.error('Error mostrando invitación:', err);
+                    }
                 }
             } else {
                 currentUser = null;
                 tripGroups = [];
                 trips = [];
                 currentTripGroup = null;
-                renderTripGroups();
+                try { renderTripGroups(); } catch (e) { console.error(e); }
                 showLoginScreen();
             }
         });
